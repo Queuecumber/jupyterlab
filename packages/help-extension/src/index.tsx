@@ -26,8 +26,6 @@ import { Menu } from '@phosphor/widgets';
 
 import * as React from 'react';
 
-import '../style/index.css';
-
 /**
  * The command IDs used by the help plugin.
  */
@@ -43,8 +41,6 @@ namespace CommandIDs {
   export const show = 'help:show';
 
   export const hide = 'help:hide';
-
-  export const toggle = 'help:toggle';
 
   export const launchClassic = 'help:launch-classic-notebook';
 }
@@ -74,9 +70,7 @@ const RESOURCES = [
   },
   {
     text: 'Markdown Reference',
-    url:
-      'https://help.github.com/articles/' +
-      'getting-started-with-writing-and-formatting-on-github/'
+    url: 'https://commonmark.org/help/'
   }
 ];
 
@@ -168,7 +162,10 @@ function activate(
   helpMenu.addGroup(resourcesGroup, 10);
 
   // Generate a cache of the kernel help links.
-  const kernelInfoCache = new Map<string, KernelMessage.IInfoReply>();
+  const kernelInfoCache = new Map<
+    string,
+    KernelMessage.IInfoReplyMsg['content']
+  >();
   serviceManager.sessions.runningChanged.connect((m, sessions) => {
     // If a new session has been added, it is at the back
     // of the session list. If one has changed or stopped,
@@ -181,7 +178,7 @@ function activate(
       return;
     }
     const session = serviceManager.sessions.connectTo(sessionModel);
-    session.kernel.ready.then(() => {
+    void session.kernel.ready.then(() => {
       // Check the cache second time so that, if two callbacks get scheduled,
       // they don't try to add the same commands.
       if (kernelInfoCache.has(sessionModel.kernel.name)) {
@@ -240,7 +237,7 @@ function activate(
           const banner = <pre>{kernelInfo.banner}</pre>;
           let body = <div className="jp-About-body">{banner}</div>;
 
-          showDialog({
+          return showDialog({
             title,
             body,
             buttons: [
@@ -263,7 +260,7 @@ function activate(
           isVisible: usesKernel,
           isEnabled: usesKernel,
           execute: () => {
-            commands.execute(CommandIDs.open, link);
+            return commands.execute(CommandIDs.open, link);
           }
         });
         kernelGroup.push({ command: commandId });
@@ -333,7 +330,7 @@ function activate(
         </div>
       );
 
-      showDialog({
+      return showDialog({
         title,
         body,
         buttons: [
@@ -359,8 +356,9 @@ function activate(
       }
 
       let widget = newHelpWidget(url, text);
-      tracker.add(widget);
+      void tracker.add(widget);
       shell.add(widget, 'main');
+      return widget;
     }
   });
 

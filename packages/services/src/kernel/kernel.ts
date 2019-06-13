@@ -126,11 +126,11 @@ export namespace Kernel {
      *
      * If the kernel status is `'dead'`, this will throw an error.
      */
-    sendShellMessage(
-      msg: KernelMessage.IShellMessage,
+    sendShellMessage<T extends KernelMessage.ShellMessageType>(
+      msg: KernelMessage.IShellMessage<T>,
       expectReply?: boolean,
       disposeOnDone?: boolean
-    ): Kernel.IFuture;
+    ): Kernel.IFuture<KernelMessage.IShellMessage<T>>;
 
     /**
      * Reconnect to a disconnected kernel.
@@ -206,7 +206,7 @@ export namespace Kernel {
      * received and validated.
      */
     requestComplete(
-      content: KernelMessage.ICompleteRequest
+      content: KernelMessage.ICompleteRequestMsg['content']
     ): Promise<KernelMessage.ICompleteReplyMsg>;
 
     /**
@@ -223,7 +223,7 @@ export namespace Kernel {
      * received and validated.
      */
     requestInspect(
-      content: KernelMessage.IInspectRequest
+      content: KernelMessage.IInspectRequestMsg['content']
     ): Promise<KernelMessage.IInspectReplyMsg>;
 
     /**
@@ -240,7 +240,7 @@ export namespace Kernel {
      * received and validated.
      */
     requestHistory(
-      content: KernelMessage.IHistoryRequest
+      content: KernelMessage.IHistoryRequestMsg['content']
     ): Promise<KernelMessage.IHistoryReplyMsg>;
 
     /**
@@ -265,10 +265,13 @@ export namespace Kernel {
      * **See also:** [[IExecuteReply]]
      */
     requestExecute(
-      content: KernelMessage.IExecuteRequest,
+      content: KernelMessage.IExecuteRequestMsg['content'],
       disposeOnDone?: boolean,
       metadata?: JSONObject
-    ): Kernel.IFuture;
+    ): Kernel.IFuture<
+      KernelMessage.IExecuteRequestMsg,
+      KernelMessage.IExecuteReplyMsg
+    >;
 
     /**
      * Send an `is_complete_request` message.
@@ -284,7 +287,7 @@ export namespace Kernel {
      * received and validated.
      */
     requestIsComplete(
-      content: KernelMessage.IIsCompleteRequest
+      content: KernelMessage.IIsCompleteRequestMsg['content']
     ): Promise<KernelMessage.IIsCompleteReplyMsg>;
 
     /**
@@ -301,7 +304,7 @@ export namespace Kernel {
      * received and validated.
      */
     requestCommInfo(
-      content: KernelMessage.ICommInfoRequest
+      content: KernelMessage.ICommInfoRequestMsg['content']
     ): Promise<KernelMessage.ICommInfoReplyMsg>;
 
     /**
@@ -312,7 +315,7 @@ export namespace Kernel {
      * #### Notes
      * See [Messaging in Jupyter](https://jupyter-client.readthedocs.io/en/latest/messaging.html#messages-on-the-stdin-router-dealer-sockets).
      */
-    sendInputReply(content: KernelMessage.IInputReply): void;
+    sendInputReply(content: KernelMessage.IInputReplyMsg['content']): void;
 
     /**
      * Connect to a comm, or create a new one.
@@ -630,6 +633,11 @@ export namespace Kernel {
     runningChanged: ISignal<IManager, IModel[]>;
 
     /**
+     * A signal emitted when there is a connection failure.
+     */
+    connectionFailure: ISignal<IManager, ServerConnection.NetworkError>;
+
+    /**
      * The server settings for the manager.
      */
     serverSettings?: ServerConnection.ISettings;
@@ -734,11 +742,14 @@ export namespace Kernel {
    * When a message is sent to a kernel, a Future is created to handle any
    * responses that may come from the kernel.
    */
-  export interface IFuture extends IDisposable {
+  export interface IFuture<
+    REQUEST extends KernelMessage.IShellMessage = KernelMessage.IShellMessage,
+    REPLY extends KernelMessage.IShellMessage = KernelMessage.IShellMessage
+  > extends IDisposable {
     /**
      * The original outgoing message.
      */
-    readonly msg: KernelMessage.IShellMessage;
+    readonly msg: REQUEST;
 
     /**
      * A promise that resolves when the future is done.
@@ -750,7 +761,7 @@ export namespace Kernel {
      * The `done` promise resolves to the reply message if there is one,
      * otherwise it resolves to `undefined`.
      */
-    readonly done: Promise<KernelMessage.IShellMessage | undefined>;
+    readonly done: Promise<REPLY | undefined>;
 
     /**
      * The reply handler for the kernel future.
@@ -761,7 +772,7 @@ export namespace Kernel {
      * `done` promise also resolves to the reply message after this handler has
      * been called.
      */
-    onReply: (msg: KernelMessage.IShellMessage) => void | PromiseLike<void>;
+    onReply: (msg: REPLY) => void | PromiseLike<void>;
 
     /**
      * The stdin handler for the kernel future.
@@ -819,7 +830,7 @@ export namespace Kernel {
     /**
      * Send an `input_reply` message.
      */
-    sendInputReply(content: KernelMessage.IInputReply): void;
+    sendInputReply(content: KernelMessage.IInputReplyMsg['content']): void;
   }
 
   /**
@@ -929,6 +940,7 @@ export namespace Kernel {
     | 'idle'
     | 'busy'
     | 'restarting'
+    | 'autorestarting'
     | 'dead'
     | 'connected';
 

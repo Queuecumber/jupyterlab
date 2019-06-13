@@ -13,7 +13,7 @@ import { Widget } from '@phosphor/widgets';
 
 import { DOMUtils, showErrorMessage } from '@jupyterlab/apputils';
 
-import { PathExt } from '@jupyterlab/coreutils';
+import { PathExt, PageConfig } from '@jupyterlab/coreutils';
 
 import { renameFile } from '@jupyterlab/docmanager';
 
@@ -272,8 +272,8 @@ export class BreadCrumbs extends Widget {
       let newPath = PathExt.join(path, name);
       promises.push(renameFile(manager, oldPath, newPath));
     }
-    Promise.all(promises).catch(err => {
-      showErrorMessage('Move Error', err);
+    void Promise.all(promises).catch(err => {
+      return showErrorMessage('Move Error', err);
     });
   }
 
@@ -357,7 +357,7 @@ namespace Private {
     let home = document.createElement('span');
     home.className =
       MATERIAL_CLASS + ' ' + BREADCRUMB_HOME + ' ' + BREADCRUMB_ITEM_CLASS;
-    home.title = 'Home';
+    home.title = PageConfig.getOption('serverRoot') || 'Home';
     let ellipsis = document.createElement('span');
     ellipsis.className =
       MATERIAL_CLASS + ' ' + BREADCRUMB_ELLIPSES + ' ' + BREADCRUMB_ITEM_CLASS;

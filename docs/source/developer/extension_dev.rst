@@ -86,7 +86,6 @@ A Jupyter front-end application object is given to each plugin in its
 ``activate()`` function. The application object has:
 
 -  commands - used to add and execute commands in the application.
--  keymap - used to add keyboard shortcuts to the application.
 -  shell - a generic Jupyter front-end shell instance.
 
 Jupyter Front-End Shell
@@ -98,10 +97,11 @@ is used to add and interact with content in the application. The ``IShell``
 interface provides an ``add()`` method for adding widgets to the application.
 In JupyterLab, the application shell consists of:
 
--  A ``top`` area for things like top level menus and toolbars
--  ``left`` and ``right`` side bar areas for collapsible content
+-  A ``top`` area for things like top level menus and toolbars.
+-  ``left`` and ``right`` side bar areas for collapsible content.
 -  A ``main`` work area for user activity.
--  A ``bottom`` area for things like status bars
+-  A ``bottom`` area for things like status bars.
+-  A ``header`` area for custom elements.
 
 Phosphor
 ~~~~~~~~
@@ -164,7 +164,8 @@ the CSS files) are watched by the WebPack process. This means that if
 your extension is in TypeScript you'll have to run a ``jlpm run build``
 before the changes will be reflected in JupyterLab. To avoid this step
 you can also watch the TypeScript sources in your extension which is
-usually assigned to the ``tsc -w`` shortcut.
+usually assigned to the ``tsc -w`` shortcut. If WebPack doesn't seem to
+detect the changes, this can be related to `the number of available watches <https://github.com/webpack/docs/wiki/troubleshooting#not-enough-watchers>`__.
 
 Note that the application is built against **released** versions of the
 core JupyterLab extensions. If your extension depends on JupyterLab
@@ -189,9 +190,8 @@ subsequently reversed by running
 
     jlpm run remove:package <extension-dir-name>
 
-This will remove the package metadata from the source tree, but will
-**not** remove any files added by the ``addsibling`` script, which
-should be removed manually.
+This will remove the package metadata from the source tree and delete
+all of the package files.
 
 The package should export EMCAScript 5 compatible JavaScript. It can
 import CSS using the syntax ``require('foo.css')``. The CSS files can

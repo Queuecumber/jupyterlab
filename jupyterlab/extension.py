@@ -34,40 +34,43 @@ def load_config(nbapp):
         get_app_info,
         get_workspaces_dir,
         get_user_settings_dir,
-        pjoin
+        pjoin,
     )
 
-    app_dir = getattr(nbapp, 'app_dir', get_app_dir())
+    app_dir = getattr(nbapp, "app_dir", get_app_dir())
     info = get_app_info(app_dir)
-    public_url = info['publicUrl']
-    user_settings_dir = getattr(
-        nbapp, 'user_settings_dir', get_user_settings_dir()
-    )
-    workspaces_dir = getattr(nbapp, 'workspaces_dir', get_workspaces_dir())
+    static_url = info["staticUrl"]
+    user_settings_dir = getattr(nbapp, "user_settings_dir", get_user_settings_dir())
+    workspaces_dir = getattr(nbapp, "workspaces_dir", get_workspaces_dir())
 
     config = LabConfig()
     config.app_dir = app_dir
-    config.app_name = 'JupyterLab'
-    config.app_namespace = 'jupyterlab'
-    config.app_settings_dir = pjoin(app_dir, 'settings')
-    config.app_version = info['version']
+    config.app_name = "JupyterLab"
+    config.app_namespace = "jupyterlab"
+    config.app_settings_dir = pjoin(app_dir, "settings")
+    config.app_version = info["version"]
     config.cache_files = True
-    config.schemas_dir = pjoin(app_dir, 'schemas')
-    config.templates_dir = pjoin(app_dir, 'static')
-    config.themes_dir = pjoin(app_dir, 'themes')
+    config.schemas_dir = pjoin(app_dir, "schemas")
+    config.templates_dir = pjoin(app_dir, "static")
+    config.themes_dir = pjoin(app_dir, "themes")
     config.user_settings_dir = user_settings_dir
     config.workspaces_dir = workspaces_dir
 
-    if getattr(nbapp, 'override_static_url', ''):
-        public_url = nbapp.override_static_url
-    if getattr(nbapp, 'override_theme_url', ''):
+    if getattr(nbapp, "override_static_url", ""):
+        static_url = nbapp.override_static_url
+    if getattr(nbapp, "override_theme_url", ""):
         config.themes_url = nbapp.override_theme_url
-        config.themes_dir = ''
+        config.themes_dir = ""
 
-    if public_url:
-        config.public_url = public_url
+    # shim for jupyterlab_server 0.3
+    # XXX remove after next JLab release (current is 1.0.0a6)
+    if static_url:
+        if hasattr(config, "static_url"):
+            config.static_url = static_url
+        else:
+            config.public_url = static_url
     else:
-        config.static_dir = pjoin(app_dir, 'static')
+        config.static_dir = pjoin(app_dir, "static")
 
     return config
 
@@ -82,70 +85,83 @@ def load_jupyter_server_extension(nbapp):
     from notebook._version import version_info
     from tornado.ioloop import IOLoop
     from markupsafe import Markup
-    from .build_handler import build_path, Builder, BuildHandler
-    from .extension_manager_handler import (
-        extensions_handler_path, ExtensionManager, ExtensionHandler
+    from .handlers.build_handler import build_path, Builder, BuildHandler
+    from .handlers.extension_manager_handler import (
+        extensions_handler_path,
+        ExtensionManager,
+        ExtensionHandler,
     )
     from .datastore import (
-        CollaborationHandler, collaboration_path,
-        CollaborationsManagerHandler, datastore_rest_path
+        CollaborationHandler,
+        collaboration_path,
+        CollaborationsManagerHandler,
+        datastore_rest_path,
     )
+    from .handlers.error_handler import ErrorHandler
     from .commands import (
-        DEV_DIR, HERE, ensure_core, ensure_dev, watch, watch_dev, get_app_dir
+        DEV_DIR,
+        HERE,
+        ensure_app,
+        ensure_core,
+        ensure_dev,
+        watch,
+        watch_dev,
+        get_app_dir,
     )
 
     web_app = nbapp.web_app
     logger = nbapp.log
+    base_url = nbapp.base_url
 
     # Handle the app_dir
-    app_dir = getattr(nbapp, 'app_dir', get_app_dir())
+    app_dir = getattr(nbapp, "app_dir", get_app_dir())
 
     # Check for core mode.
     core_mode = False
-    if getattr(nbapp, 'core_mode', False) or app_dir.startswith(HERE):
+    if getattr(nbapp, "core_mode", False) or app_dir.startswith(HERE):
         app_dir = HERE
         core_mode = True
-        logger.info('Running JupyterLab in core mode')
+        logger.info("Running JupyterLab in core mode")
 
     # Check for dev mode.
     dev_mode = False
-    if getattr(nbapp, 'dev_mode', False) or app_dir.startswith(DEV_DIR):
+    if getattr(nbapp, "dev_mode", False) or app_dir.startswith(DEV_DIR):
         app_dir = DEV_DIR
         dev_mode = True
-        logger.info('Running JupyterLab in dev mode')
+        logger.info("Running JupyterLab in dev mode")
 
     # Set the value on nbapp so it will get picked up in load_config
     nbapp.app_dir = app_dir
 
     config = load_config(nbapp)
-    config.app_name = 'JupyterLab'
-    config.app_namespace = 'jupyterlab'
-    config.page_url = '/lab'
+    config.app_name = "JupyterLab"
+    config.app_namespace = "jupyterlab"
+
+    # shim for jupyterlab_server 0.3
+    # XXX remove after next JLab release (current is 1.0.0a6)
+    if hasattr(config, "app_url"):
+        config.app_url = "/lab"
+    else:
+        config.page_url = "/lab"
+
     config.cache_files = True
 
     # Check for watch.
-    watch_mode = getattr(nbapp, 'watch', False)
+    watch_mode = getattr(nbapp, "watch", False)
 
     if watch_mode and core_mode:
-        logger.warn('Cannot watch in core mode, did you mean --dev-mode?')
+        logger.warn("Cannot watch in core mode, did you mean --dev-mode?")
         watch_mode = False
 
     if core_mode and dev_mode:
-        logger.warn('Conflicting modes, choosing dev_mode over core_mode')
+        logger.warn("Conflicting modes, choosing dev_mode over core_mode")
         core_mode = False
 
-    page_config = web_app.settings.setdefault('page_config_data', dict())
-    page_config['buildAvailable'] = not core_mode and not dev_mode
-    page_config['buildCheck'] = not core_mode and not dev_mode
-    page_config['defaultWorkspace'] = ujoin(nbapp.base_url, config.page_url)
-    page_config['devMode'] = dev_mode
-    page_config['token'] = nbapp.token
-
-    # Handle bundle url
-    bundle_url = config.public_url
-    if bundle_url.startswith(config.page_url):
-        bundle_url = ujoin(nbapp.base_url, bundle_url)
-    page_config['bundleUrl'] = bundle_url
+    page_config = web_app.settings.setdefault("page_config_data", dict())
+    page_config["buildAvailable"] = not core_mode and not dev_mode
+    page_config["buildCheck"] = not core_mode and not dev_mode
+    page_config["devMode"] = dev_mode
+    page_config["token"] = nbapp.token
 
     # Export the version info tuple to a JSON array. This gets printed
     # inside double quote marks, so we render it to a JSON string of the
@@ -153,29 +169,45 @@ def load_jupyter_server_extension(nbapp):
     # We also have to wrap it in `Markup` so that it isn't escaped
     # by Jinja. Otherwise, if the version has string parts these will be
     # escaped and then will have to be unescaped on the frontend.
-    page_config['notebookVersion'] = Markup(dumps(dumps(version_info))[1:-1])
+    page_config["notebookVersion"] = Markup(dumps(dumps(version_info))[1:-1])
 
     if nbapp.file_to_run and type(nbapp).__name__ == "LabApp":
         relpath = os.path.relpath(nbapp.file_to_run, nbapp.notebook_dir)
-        uri = url_escape(ujoin('/lab/tree', *relpath.split(os.sep)))
+        uri = url_escape(ujoin("/lab/tree", *relpath.split(os.sep)))
         nbapp.default_url = uri
-        nbapp.file_to_run = ''
+        nbapp.file_to_run = ""
+
+    # Print messages.
+    logger.info("JupyterLab extension loaded from %s" % HERE)
+    logger.info("JupyterLab application directory is %s" % app_dir)
+
+    build_url = ujoin(base_url, build_path)
+    builder = Builder(logger, core_mode, app_dir)
+    build_handler = (build_url, BuildHandler, {"builder": builder})
+    handlers = [build_handler]
+
+    errored = False
 
     if core_mode:
         logger.info(CORE_NOTE.strip())
         ensure_core(logger)
 
     elif dev_mode:
-        ensure_dev(logger)
         if not watch_mode:
+            ensure_dev(logger)
             logger.info(DEV_NOTE)
 
-    # Print messages.
-    logger.info('JupyterLab extension loaded from %s' % HERE)
-    logger.info('JupyterLab application directory is %s' % app_dir)
+    # Make sure the app dir exists.
+    else:
+        msgs = ensure_app(app_dir)
+        if msgs:
+            [logger.error(msg) for msg in msgs]
+            handler = (ujoin(base_url, "/lab"), ErrorHandler, {"messages": msgs})
+            handlers.append(handler)
+            errored = True
 
     if watch_mode:
-        logger.info('Starting JupyterLab watch mode...')
+        logger.info("Starting JupyterLab watch mode...")
 
         # Set the ioloop in case the watch fails.
         nbapp.ioloop = IOLoop.current()
@@ -183,15 +215,15 @@ def load_jupyter_server_extension(nbapp):
             watch_dev(logger)
         else:
             watch(app_dir, logger)
-            page_config['buildAvailable'] = False
+            page_config["buildAvailable"] = False
 
         config.cache_files = False
 
-    base_url = web_app.settings['base_url']
+    base_url = web_app.settings["base_url"]
 
     build_url = ujoin(base_url, build_path)
     builder = Builder(logger, core_mode, app_dir)
-    build_handler = (build_url, BuildHandler, {'builder': builder})
+    build_handler = (build_url, BuildHandler, {"builder": builder})
 
     collaborations_url = ujoin(base_url, collaboration_path)
     collaborations_handler = (collaborations_url, CollaborationHandler, {})
@@ -201,13 +233,23 @@ def load_jupyter_server_extension(nbapp):
 
     handlers = [build_handler, collaborations_handler, colab_manager_handler]
 
-    if not core_mode:
+    if not core_mode and not errored:
         ext_url = ujoin(base_url, extensions_handler_path)
         ext_manager = ExtensionManager(logger, app_dir)
-        ext_handler = (ext_url, ExtensionHandler, {'manager': ext_manager})
+        ext_handler = (ext_url, ExtensionHandler, {"manager": ext_manager})
         handlers.append(ext_handler)
 
-    # Must add before the launcher handlers to avoid shadowing.
-    web_app.add_handlers('.*$', handlers)
+    # Must add before the root server handlers to avoid shadowing.
+    web_app.add_handlers(".*$", handlers)
 
-    add_handlers(web_app, config)
+    # If running under JupyterHub, add more metadata.
+    if hasattr(nbapp, "hub_prefix"):
+        page_config["hubPrefix"] = nbapp.hub_prefix
+        page_config["hubHost"] = nbapp.hub_host
+        page_config["hubUser"] = nbapp.user
+        api_token = os.getenv("JUPYTERHUB_API_TOKEN", "")
+        page_config["token"] = api_token
+
+    # Add the root handlers if we have not errored.
+    if not errored:
+        add_handlers(web_app, config)

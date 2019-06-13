@@ -5,6 +5,7 @@
 
 import {
   IFrame,
+  IInstanceTracker,
   ReactWidget,
   ToolbarButton,
   ToolbarButtonComponent,
@@ -20,12 +21,23 @@ import {
   IDocumentWidget
 } from '@jupyterlab/docregistry';
 
+import { Token } from '@phosphor/coreutils';
+
 import { ISignal, Signal } from '@phosphor/signaling';
 
 import * as React from 'react';
 
-import '../style/index.css';
+/**
+ * A class that tracks HTML viewer widgets.
+ */
+export interface IHTMLViewerTracker extends IInstanceTracker<HTMLViewer> {}
 
+/**
+ * The HTML viewer tracker token.
+ */
+export const IHTMLViewerTracker = new Token<IHTMLViewerTracker>(
+  '@jupyterlab/htmlviewer:IHTMLViewerTracker'
+);
 /**
  * The timeout to wait for change activity to have ceased before rendering.
  */
@@ -61,7 +73,7 @@ export class HTMLViewer extends DocumentWidget<IFrame>
     });
     this.content.addClass(CSS_CLASS);
 
-    this.context.ready.then(() => {
+    void this.context.ready.then(() => {
       this.update();
       // Throttle the rendering rate of the widget.
       this._monitor = new ActivityMonitor({
@@ -78,7 +90,7 @@ export class HTMLViewer extends DocumentWidget<IFrame>
     this.toolbar.addItem(
       'refresh',
       new ToolbarButton({
-        iconClassName: 'jp-RefreshIcon jp-Icon jp-Icon-16',
+        iconClassName: 'jp-RefreshIcon',
         onClick: () => {
           this.content.url = this.content.url;
         },
@@ -141,7 +153,7 @@ export class HTMLViewer extends DocumentWidget<IFrame>
       return;
     }
     this._renderPending = true;
-    this._renderModel().then(() => (this._renderPending = false));
+    void this._renderModel().then(() => (this._renderPending = false));
   }
 
   /**

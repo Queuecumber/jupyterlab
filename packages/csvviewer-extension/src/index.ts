@@ -7,7 +7,11 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 
-import { InstanceTracker, IThemeManager, Dialog } from '@jupyterlab/apputils';
+import {
+  InstanceTracker,
+  IThemeManager,
+  InputDialog
+} from '@jupyterlab/apputils';
 
 import { ISearchProviderRegistry } from '@jupyterlab/documentsearch';
 
@@ -22,7 +26,7 @@ import { IDocumentWidget } from '@jupyterlab/docregistry';
 
 import { DataGrid } from '@phosphor/datagrid';
 
-import { IMainMenu, IEditMenu } from '@jupyterlab/mainmenu';
+import { IEditMenu, IMainMenu } from '@jupyterlab/mainmenu';
 import { CSVSearchProvider } from './searchprovider';
 
 /**
@@ -64,7 +68,10 @@ function addMenuEntries(
   mainMenu.editMenu.goToLiners.add({
     tracker,
     goToLine: (widget: IDocumentWidget<CSVViewer>) => {
-      return Dialog.prompt<number>('Go to Line', 0).then(value => {
+      return InputDialog.getNumber({
+        title: 'Go to Line',
+        value: 0
+      }).then(value => {
         if (value.button.accept) {
           widget.content.goToLine(value.value);
         }
@@ -108,10 +115,10 @@ function activateCsv(
   let ft = app.docRegistry.getFileType('csv');
   factory.widgetCreated.connect((sender, widget) => {
     // Track the widget.
-    tracker.add(widget);
+    void tracker.add(widget);
     // Notify the instance tracker if restore data needs to update.
     widget.context.pathChanged.connect(() => {
-      tracker.save(widget);
+      void tracker.save(widget);
     });
 
     if (ft) {
@@ -139,7 +146,7 @@ function activateCsv(
 
   addMenuEntries(mainMenu, tracker);
   if (searchregistry) {
-    searchregistry.registerProvider('csv', CSVSearchProvider);
+    searchregistry.register('csv', CSVSearchProvider);
   }
 }
 
@@ -178,10 +185,10 @@ function activateTsv(
   let ft = app.docRegistry.getFileType('tsv');
   factory.widgetCreated.connect((sender, widget) => {
     // Track the widget.
-    tracker.add(widget);
+    void tracker.add(widget);
     // Notify the instance tracker if restore data needs to update.
     widget.context.pathChanged.connect(() => {
-      tracker.save(widget);
+      void tracker.save(widget);
     });
 
     if (ft) {
@@ -209,7 +216,7 @@ function activateTsv(
 
   addMenuEntries(mainMenu, tracker);
   if (searchregistry) {
-    searchregistry.registerProvider('tsv', CSVSearchProvider);
+    searchregistry.register('tsv', CSVSearchProvider);
   }
 }
 

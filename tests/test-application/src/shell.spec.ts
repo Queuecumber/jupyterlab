@@ -11,7 +11,7 @@ import { Widget } from '@phosphor/widgets';
 
 import { simulate } from 'simulate-event';
 
-import { LabShell } from '@jupyterlab/application/src';
+import { LabShell } from '@jupyterlab/application';
 
 class ContentWidget extends Widget {
   activated = false;
@@ -23,6 +23,12 @@ class ContentWidget extends Widget {
 
 describe('LabShell', () => {
   let shell: LabShell;
+
+  beforeAll(() => {
+    console.log(
+      'Expecting 5 console errors logged in this suite: "Widgets added to app shell must have unique id property."'
+    );
+  });
 
   beforeEach(() => {
     shell = new LabShell();
@@ -115,6 +121,28 @@ describe('LabShell', () => {
       const state = shell.saveLayout();
       shell.restoreLayout(state);
       return shell.restored;
+    });
+  });
+
+  describe('#add(widget, "header")', () => {
+    it('should add a widget to the header', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'header');
+      expect(shell.isEmpty('header')).to.equal(false);
+    });
+
+    it('should be a no-op if the widget has no id', () => {
+      const widget = new Widget();
+      shell.add(widget, 'header');
+      expect(shell.isEmpty('header')).to.equal(true);
+    });
+
+    it('should accept options', () => {
+      const widget = new Widget();
+      widget.id = 'foo';
+      shell.add(widget, 'header', { rank: 10 });
+      expect(shell.isEmpty('header')).to.equal(false);
     });
   });
 

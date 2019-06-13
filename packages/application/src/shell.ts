@@ -1,6 +1,8 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
+import { Debouncer } from '@jupyterlab/coreutils';
+
 import { DocumentRegistry } from '@jupyterlab/docregistry';
 
 import { ArrayExt, find, IIterator, iter, toArray } from '@phosphor/algorithm';
@@ -61,7 +63,7 @@ const ACTIVITY_CLASS = 'jp-Activity';
 
 /* tslint:disable */
 /**
- * The layout restorer token.
+ * The JupyterLab application shell token.
  */
 export const ILabShell = new Token<ILabShell>(
   '@jupyterlab/application:ILabShell'
@@ -69,7 +71,7 @@ export const ILabShell = new Token<ILabShell>(
 /* tslint:enable */
 
 /**
- * The JupyterLab application shell.
+ * The JupyterLab application shell interface.
  */
 export interface ILabShell extends LabShell {}
 
@@ -80,7 +82,7 @@ export namespace ILabShell {
   /**
    * The areas of the application shell where widgets can reside.
    */
-  export type Area = 'main' | 'top' | 'left' | 'right' | 'bottom';
+  export type Area = 'main' | 'header' | 'top' | 'left' | 'right' | 'bottom';
 
   /**
    * The restorable description of an area within the main dock panel.
@@ -180,6 +182,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     let topPanel = (this._topPanel = new Panel());
     let hboxPanel = new BoxPanel();
     let dockPanel = (this._dockPanel = new DockPanel());
+    let headerPanel = (this._headerPanel = new Panel());
     MessageLoop.installMessageHook(dockPanel, this._dockChildHook);
 
     let hsplitPanel = new SplitPanel();
@@ -194,6 +197,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     hboxPanel.id = 'jp-main-content-panel';
     dockPanel.id = 'jp-main-dock-panel';
     hsplitPanel.id = 'jp-main-split-panel';
+    headerPanel.id = 'jp-header-panel';
 
     leftHandler.sideBar.addClass(SIDEBAR_CLASS);
     leftHandler.sideBar.addClass('jp-mod-left');
@@ -234,15 +238,18 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     // panel.
     hsplitPanel.setRelativeSizes([1, 2.5, 1]);
 
+    BoxLayout.setStretch(headerPanel, 0);
     BoxLayout.setStretch(topPanel, 0);
     BoxLayout.setStretch(hboxPanel, 1);
     BoxLayout.setStretch(bottomPanel, 0);
 
+    rootLayout.addWidget(headerPanel);
     rootLayout.addWidget(topPanel);
     rootLayout.addWidget(hboxPanel);
     rootLayout.addWidget(bottomPanel);
 
-    // initially hiding bottom panel when no elements inside
+    // initially hiding header and bottom panel when no elements inside
+    this._headerPanel.hide();
     this._bottomPanel.hide();
 
     this.layout = rootLayout;
@@ -439,7 +446,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
 
   /*
    * Activate the next Tab in the active TabBar.
-  */
+   */
   activateNextTab(): void {
     let current = this._currentTabBar();
     if (!current) {
@@ -472,7 +479,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
 
   /*
    * Activate the previous Tab in the active TabBar.
-  */
+   */
   activatePreviousTab(): void {
     let current = this._currentTabBar();
     if (!current) {
@@ -516,6 +523,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
         return this._addToLeftArea(widget, options);
       case 'right':
         return this._addToRightArea(widget, options);
+      case 'header':
+        return this._addToHeaderArea(widget, options);
       case 'top':
         return this._addToTopArea(widget, options);
       case 'bottom':
@@ -539,6 +548,17 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
   collapseRight(): void {
     this._rightHandler.collapse();
     this._onLayoutModified();
+  }
+
+  /**
+   * Dispose the shell.
+   */
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
+    }
+    this._layoutDebouncer.dispose();
+    super.dispose();
   }
 
   /**
@@ -584,6 +604,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
         return this._leftHandler.stackedPanel.widgets.length === 0;
       case 'main':
         return this._dockPanel.isEmpty;
+      case 'header':
+        return this._headerPanel.widgets.length === 0;
       case 'top':
         return this._topPanel.widgets.length === 0;
       case 'bottom':
@@ -666,6 +688,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
         return iter(this._leftHandler.sideBar.titles.map(t => t.owner));
       case 'right':
         return iter(this._rightHandler.sideBar.titles.map(t => t.owner));
+      case 'header':
+        return this._headerPanel.children();
       case 'top':
         return this._topPanel.children();
       case 'bottom':
@@ -727,11 +751,16 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
 
     const dock = this._dockPanel;
     const mode = options.mode || 'tab-after';
-    let ref: Widget | null = null;
+    let ref: Widget | null = this.currentWidget;
 
     if (options.ref) {
       ref = find(dock.widgets(), value => value.id === options.ref!) || null;
     }
+
+    // Add widget ID to tab so that we can get a handle on the tab's widget
+    // (for context menu support)
+    widget.title.dataset = { ...widget.title.dataset, id: widget.id };
+
     dock.addWidget(widget, { mode, ref });
 
     // The dock panel doesn't account for placement information while
@@ -789,6 +818,28 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     this._onLayoutModified();
   }
 
+  /**
+   * Add a widget to the header content area.
+   *
+   * #### Notes
+   * Widgets must have a unique `id` property, which will be used as the DOM id.
+   */
+  private _addToHeaderArea(
+    widget: Widget,
+    options?: DocumentRegistry.IOpenOptions
+  ): void {
+    if (!widget.id) {
+      console.error('Widgets added to app shell must have unique id property.');
+      return;
+    }
+    // Temporary: widgets are added to the panel in order of insertion.
+    this._headerPanel.addWidget(widget);
+    this._onLayoutModified();
+
+    if (this._headerPanel.isHidden) {
+      this._headerPanel.show();
+    }
+  }
   /**
    * Add a widget to the bottom content area.
    *
@@ -894,16 +945,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
    * Handle a change to the layout.
    */
   private _onLayoutModified(): void {
-    // The dock can emit layout modified signals while in transient
-    // states (for instance, when switching from single-document to
-    // multiple-document mode). In those states, it can be unreliable
-    // for the signal consumers to query layout properties.
-    // We fix this by debouncing the layout modified signal so that it
-    // is only emitted after rearranging is done.
-    window.clearTimeout(this._debouncer);
-    this._debouncer = window.setTimeout(() => {
-      this._layoutModified.emit(undefined);
-    }, 0);
+    void this._layoutDebouncer.invoke();
   }
 
   /**
@@ -934,13 +976,16 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
   private _dockPanel: DockPanel;
   private _isRestored = false;
   private _layoutModified = new Signal<this, void>(this);
+  private _layoutDebouncer = new Debouncer(() => {
+    this._layoutModified.emit(undefined);
+  }, 0);
   private _leftHandler: Private.SideBarHandler;
   private _restored = new PromiseDelegate<ILabShell.ILayout>();
   private _rightHandler: Private.SideBarHandler;
   private _tracker = new FocusTracker<Widget>();
+  private _headerPanel: Panel;
   private _topPanel: Panel;
   private _bottomPanel: Panel;
-  private _debouncer = 0;
   private _mainOptionsCache = new Map<Widget, DocumentRegistry.IOpenOptions>();
   private _sideOptionsCache = new Map<Widget, DocumentRegistry.IOpenOptions>();
 }

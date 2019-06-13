@@ -18,23 +18,18 @@ import { Widget } from '@phosphor/widgets';
 /**
  * The type for all JupyterFrontEnd application plugins.
  *
- * #### Notes
- * The generic `T` argument indicates the type that the plugin `provides` upon
- * being activated.
+ * @typeparam T - The type that the plugin `provides` upon being activated.
  */
 export type JupyterFrontEndPlugin<T> = IPlugin<JupyterFrontEnd, T>;
 
 /**
  * The base Jupyter front-end application class.
  *
+ * @typeparam `T` - The `shell` type. Defaults to `JupyterFrontEnd.IShell`.
+ *
  * #### Notes
  * This type is useful as a generic application against which front-end plugins
  * can be authored. It inherits from the phosphor `Application`.
- *
- * The generic type argument semantics are as follows.
- *
- * `T extends JupyterFrontEnd.Shell = JupyterFrontEnd.Shell` - the type of the
- * `shell` attribute of a `JupyterFrontEnd`.
  */
 export abstract class JupyterFrontEnd<
   T extends JupyterFrontEnd.IShell = JupyterFrontEnd.IShell
@@ -46,7 +41,7 @@ export abstract class JupyterFrontEnd<
     super(options);
 
     // The default restored promise if one does not exist in the options.
-    const restored = new Promise(resolve => {
+    const restored = new Promise<void>(resolve => {
       requestAnimationFrame(() => {
         resolve();
       });
@@ -59,6 +54,18 @@ export abstract class JupyterFrontEnd<
       options.restored ||
       this.started.then(() => restored).catch(() => restored);
     this.serviceManager = options.serviceManager || new ServiceManager();
+
+    this.commands.addCommand(Private.CONTEXT_MENU_INFO, {
+      label: 'Shift+Right Click for Browser Menu',
+      isEnabled: () => false,
+      execute: () => void 0
+    });
+
+    this.contextMenu.addItem({
+      command: Private.CONTEXT_MENU_INFO,
+      selector: 'body',
+      rank: Infinity
+    });
   }
 
   /**
@@ -121,7 +128,7 @@ export abstract class JupyterFrontEnd<
         return node;
       }
       node = node.parentNode as HTMLElement;
-    } while (node.parentNode && node !== node.parentNode);
+    } while (node && node.parentNode && node !== node.parentNode);
     return undefined;
 
     // TODO: we should be able to use .composedPath() to simplify this function
@@ -143,7 +150,26 @@ export abstract class JupyterFrontEnd<
    */
   protected evtContextMenu(event: MouseEvent): void {
     this._contextMenuEvent = event;
-    super.evtContextMenu(event);
+    if (event.shiftKey) {
+      return;
+    }
+    const opened = this.contextMenu.open(event);
+    if (opened) {
+      const items = this.contextMenu.menu.items;
+      // If only the context menu information will be shown,
+      // with no real commands, close the context menu and
+      // allow the native one to open.
+      if (
+        items.length === 1 &&
+        items[0].command === Private.CONTEXT_MENU_INFO
+      ) {
+        this.contextMenu.menu.close();
+        return;
+      }
+      // Stop propagation and allow the application context menu to show.
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   private _contextMenuEvent: MouseEvent;
@@ -239,18 +265,32 @@ export namespace JupyterFrontEnd {
      */
     readonly urls: {
       readonly base: string;
-      readonly defaultWorkspace: string;
       readonly notFound?: string;
-      readonly page: string;
-      readonly public: string;
+      readonly app: string;
+      readonly static: string;
       readonly settings: string;
       readonly themes: string;
       readonly tree: string;
       readonly workspaces: string;
+      readonly hubPrefix?: string;
+      readonly hubHost?: string;
     };
 
     /**
-     * The local directories used by the application.
+     * The server directories used by the application, for user information
+     * only.
+     *
+     * #### Notes
+     * These are for user information and user interface hints only and should
+     * not be relied on in code. A server may set these to empty strings if it
+     * does not want to expose this information.
+     *
+     * Examples of appropriate use include displaying a help dialog for a user
+     * listing the paths, or a tooltip in a filebrowser displaying the server
+     * root. Examples of inapproriate use include using one of these paths in a
+     * terminal command, generating code using these paths, or using one of
+     * these paths in a request to the server (it would be better to write a
+     * server extension to handle these cases).
      */
     readonly directories: {
       readonly appSettings: string;
@@ -263,4 +303,15 @@ export namespace JupyterFrontEnd {
       readonly workspaces: string;
     };
   }
+}
+
+/**
+ * A namespace for module-private functionality.
+ */
+namespace Private {
+  /**
+   * An id for a private context-menu-info
+   * ersatz command.
+   */
+  export const CONTEXT_MENU_INFO = '__internal:context-menu-info';
 }

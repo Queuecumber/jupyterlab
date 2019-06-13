@@ -17,39 +17,30 @@ import {
   IThemeManager,
   IWindowResolver,
   ThemeManager,
-  WindowResolver
+  WindowResolver,
+  Printing
 } from '@jupyterlab/apputils';
 
 import {
+  Debouncer,
+  IRateLimiter,
   ISettingRegistry,
   IStateDB,
   SettingRegistry,
   StateDB,
+  Throttler,
   URLExt
 } from '@jupyterlab/coreutils';
 
 import { IMainMenu } from '@jupyterlab/mainmenu';
 
-import { CommandRegistry } from '@phosphor/commands';
-
 import { PromiseDelegate } from '@phosphor/coreutils';
 
-import { DisposableDelegate, IDisposable } from '@phosphor/disposable';
+import { DisposableDelegate } from '@phosphor/disposable';
 
 import { Menu } from '@phosphor/widgets';
 
 import { Palette } from './palette';
-
-import { createRedirectForm } from './redirect';
-
-import '../style/index.css';
-
-/**
- * The interval in milliseconds that calls to save a workspace are debounced
- * to allow for multiple quickly executed state changes to result in a single
- * workspace save operation.
- */
-const WORKSPACE_SAVE_DEBOUNCE_INTERVAL = 750;
 
 /**
  * The interval in milliseconds before recover options appear during splash.
@@ -64,13 +55,11 @@ namespace CommandIDs {
 
   export const loadState = 'apputils:load-statedb';
 
-  export const recoverState = 'apputils:recover-statedb';
+  export const print = 'apputils:print';
 
   export const reset = 'apputils:reset';
 
   export const resetOnLoad = 'apputils:reset-on-load';
-
-  export const saveState = 'apputils:save-statedb';
 }
 
 /**
@@ -143,6 +132,14 @@ const themes: JupyterFrontEndPlugin<IThemeManager> = {
       currentTheme = args.newValue;
       app.shell.dataset.themeLight = String(manager.isLight(currentTheme));
       app.shell.dataset.themeName = currentTheme;
+      if (
+        app.shell.dataset.themeScrollbars !==
+        String(manager.themeScrollbars(currentTheme))
+      ) {
+        app.shell.dataset.themeScrollbars = String(
+          manager.themeScrollbars(currentTheme)
+        );
+      }
       commands.notifyCommandChanged(CommandIDs.changeTheme);
     });
 
@@ -157,7 +154,7 @@ const themes: JupyterFrontEndPlugin<IThemeManager> = {
         if (theme === manager.theme) {
           return;
         }
-        manager.setTheme(theme);
+        return manager.setTheme(theme);
       }
     });
 
@@ -191,7 +188,7 @@ const themesPaletteMenu: JupyterFrontEndPlugin<void> = {
     if (mainMenu) {
       const themeMenu = new Menu({ commands });
       themeMenu.title.label = 'JupyterLab Theme';
-      app.restored.then(() => {
+      void app.restored.then(() => {
         const command = CommandIDs.changeTheme;
         const isPalette = false;
 
@@ -212,7 +209,7 @@ const themesPaletteMenu: JupyterFrontEndPlugin<void> = {
 
     // If we have a command palette, add theme switching options to it.
     if (palette) {
-      app.restored.then(() => {
+      void app.restored.then(() => {
         const category = 'Settings';
         const command = CommandIDs.changeTheme;
         const isPalette = true;
@@ -239,24 +236,37 @@ const resolver: JupyterFrontEndPlugin<IWindowResolver> = {
     paths: JupyterFrontEnd.IPaths,
     router: IRouter
   ) => {
-    const workspacePattern = new RegExp(`^${paths.urls.workspaces}([^?\/]+)`);
+    const { hash, path, search } = router.current;
+    const query = URLExt.queryStringToObject(search || '');
     const solver = new WindowResolver();
-    const match = router.current.path.match(workspacePattern);
+    const { urls } = paths;
+    const match = path.match(new RegExp(`^${urls.workspaces}\/([^?\/]+)`));
     const workspace = (match && decodeURIComponent(match[1])) || '';
     const candidate = Private.candidate(paths, workspace);
-
+    const rest = workspace
+      ? path.replace(new RegExp(`^${urls.workspaces}\/${workspace}`), '')
+      : path.replace(new RegExp(`^${urls.app}\/?`), '');
     try {
       await solver.resolve(candidate);
+      return solver;
     } catch (error) {
-      console.warn('Window resolution failed:', error);
-
-      // Return a promise that never resolves.
+      // Window resolution has failed so the URL must change. Return a promise
+      // that never resolves to prevent the application from loading plugins
+      // that rely on `IWindowResolver`.
       return new Promise<IWindowResolver>(() => {
-        Private.redirect(router, paths, workspacePattern);
+        const { base, workspaces } = paths.urls;
+        const pool =
+          'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        const random = pool[Math.floor(Math.random() * pool.length)];
+        const path = URLExt.join(base, workspaces, `auto-${random}`) + rest;
+
+        // Clone the originally requested workspace after redirecting.
+        query['clone'] = workspace;
+
+        const url = path + URLExt.objectToQueryString(query) + (hash || '');
+        router.navigate(url, { hard: true });
       });
     }
-
-    return solver;
   }
 };
 
@@ -268,117 +278,160 @@ const splash: JupyterFrontEndPlugin<ISplashScreen> = {
   autoStart: true,
   provides: ISplashScreen,
   activate: app => {
+    const { commands, restored } = app;
+
+    // Create splash element and populate it.
+    const splash = document.createElement('div');
+    const galaxy = document.createElement('div');
+    const logo = document.createElement('div');
+
+    splash.id = 'jupyterlab-splash';
+    galaxy.id = 'galaxy';
+    logo.id = 'main-logo';
+
+    galaxy.appendChild(logo);
+    ['1', '2', '3'].forEach(id => {
+      const moon = document.createElement('div');
+      const planet = document.createElement('div');
+
+      moon.id = `moon${id}`;
+      moon.className = 'moon orbit';
+      planet.id = `planet${id}`;
+      planet.className = 'planet';
+
+      moon.appendChild(planet);
+      galaxy.appendChild(moon);
+    });
+
+    splash.appendChild(galaxy);
+
+    // Create debounced recovery dialog function.
+    let dialog: Dialog<any>;
+    const recovery: IRateLimiter = new Throttler(async () => {
+      if (dialog) {
+        return;
+      }
+
+      dialog = new Dialog({
+        title: 'Loading...',
+        body: `The loading screen is taking a long time.
+          Would you like to clear the workspace or keep waiting?`,
+        buttons: [
+          Dialog.cancelButton({ label: 'Keep Waiting' }),
+          Dialog.warnButton({ label: 'Clear Workspace' })
+        ]
+      });
+
+      try {
+        const result = await dialog.launch();
+        dialog.dispose();
+        dialog = null;
+        if (result.button.accept && commands.hasCommand(CommandIDs.reset)) {
+          return commands.execute(CommandIDs.reset);
+        }
+
+        // Re-invoke the recovery timer in the next frame.
+        requestAnimationFrame(() => {
+          // Because recovery can be stopped, handle invocation rejection.
+          void recovery.invoke().catch(_ => undefined);
+        });
+      } catch (error) {
+        /* no-op */
+      }
+    }, SPLASH_RECOVER_TIMEOUT);
+
+    // Return ISplashScreen.
+    let splashCount = 0;
     return {
       show: (light = true) => {
-        const { commands, restored } = app;
+        splash.classList.remove('splash-fade');
+        splash.classList.toggle('light', light);
+        splash.classList.toggle('dark', !light);
+        splashCount++;
+        document.body.appendChild(splash);
 
-        return Private.showSplash(restored, commands, CommandIDs.reset, light);
+        // Because recovery can be stopped, handle invocation rejection.
+        void recovery.invoke().catch(_ => undefined);
+
+        return new DisposableDelegate(async () => {
+          await restored;
+          if (--splashCount === 0) {
+            void recovery.stop();
+
+            if (dialog) {
+              dialog.dispose();
+              dialog = null;
+            }
+
+            splash.classList.add('splash-fade');
+            window.setTimeout(() => {
+              document.body.removeChild(splash);
+            }, 200);
+          }
+        });
       }
     };
   }
 };
 
+const print: JupyterFrontEndPlugin<void> = {
+  id: '@jupyterlab/apputils-extension:print',
+  autoStart: true,
+  activate: (app: JupyterFrontEnd) => {
+    app.commands.addCommand(CommandIDs.print, {
+      label: 'Print...',
+      isEnabled: () => {
+        const widget = app.shell.currentWidget;
+        return Printing.getPrintFunction(widget) !== null;
+      },
+      execute: async () => {
+        const widget = app.shell.currentWidget;
+        const printFunction = Printing.getPrintFunction(widget);
+        if (printFunction) {
+          await printFunction();
+        }
+      }
+    });
+  }
+};
+
 /**
  * The default state database for storing application state.
+ *
+ * #### Notes
+ * If this extension is loaded with a window resolver, it will automatically add
+ * state management commands, URL support for `clone` and `reset`, and workspace
+ * auto-saving. Otherwise, it will return a simple in-memory state database.
  */
 const state: JupyterFrontEndPlugin<IStateDB> = {
   id: '@jupyterlab/apputils-extension:state',
   autoStart: true,
   provides: IStateDB,
-  requires: [JupyterFrontEnd.IPaths, IRouter, IWindowResolver],
-  optional: [ISplashScreen],
+  requires: [JupyterFrontEnd.IPaths, IRouter],
+  optional: [ISplashScreen, IWindowResolver],
   activate: (
     app: JupyterFrontEnd,
     paths: JupyterFrontEnd.IPaths,
     router: IRouter,
-    resolver: IWindowResolver,
-    splash: ISplashScreen | null
+    splash: ISplashScreen | null,
+    resolver: IWindowResolver | null
   ) => {
-    let debouncer: number;
-    let resolved = false;
+    if (resolver === null) {
+      return new StateDB();
+    }
 
+    let resolved = false;
     const { commands, serviceManager } = app;
     const { workspaces } = serviceManager;
     const workspace = resolver.name;
     const transform = new PromiseDelegate<StateDB.DataTransform>();
-    const db = new StateDB({
-      namespace: app.namespace,
-      transform: transform.promise,
-      windowName: workspace
+    const db = new StateDB({ transform: transform.promise });
+    const save = new Debouncer(async () => {
+      const id = workspace;
+      const metadata = { id };
+      const data = await db.toJSON();
+      await workspaces.save(id, { data, metadata });
     });
-
-    commands.addCommand(CommandIDs.recoverState, {
-      execute: async ({ global }) => {
-        const immediate = true;
-        const silent = true;
-
-        // Clear the state silently so that the state changed signal listener
-        // will not be triggered as it causes a save state.
-        await db.clear(silent);
-
-        // If the user explictly chooses to recover state, all of local storage
-        // should be cleared.
-        if (global) {
-          try {
-            window.localStorage.clear();
-            console.log('Cleared local storage');
-          } catch (error) {
-            console.warn('Clearing local storage failed.', error);
-
-            // To give the user time to see the console warning before redirect,
-            // do not set the `immediate` flag.
-            return commands.execute(CommandIDs.saveState);
-          }
-        }
-
-        return commands.execute(CommandIDs.saveState, { immediate });
-      }
-    });
-
-    // Conflate all outstanding requests to the save state command that happen
-    // within the `WORKSPACE_SAVE_DEBOUNCE_INTERVAL` into a single promise.
-    let conflated: PromiseDelegate<void> | null = null;
-
-    commands.addCommand(CommandIDs.saveState, {
-      label: () => `Save Workspace (${workspace})`,
-      execute: ({ immediate }) => {
-        const timeout = immediate ? 0 : WORKSPACE_SAVE_DEBOUNCE_INTERVAL;
-        const id = workspace;
-        const metadata = { id };
-
-        // Only instantiate a new conflated promise if one is not outstanding.
-        if (!conflated) {
-          conflated = new PromiseDelegate<void>();
-        }
-
-        if (debouncer) {
-          window.clearTimeout(debouncer);
-        }
-
-        debouncer = window.setTimeout(async () => {
-          // Prevent a race condition between the timeout and saving.
-          if (!conflated) {
-            return;
-          }
-
-          const data = await db.toJSON();
-
-          try {
-            await workspaces.save(id, { data, metadata });
-            conflated.resolve(undefined);
-          } catch (error) {
-            conflated.reject(error);
-          }
-          conflated = null;
-        }, timeout);
-
-        return conflated.promise;
-      }
-    });
-
-    const listener = (sender: any, change: StateDB.Change) => {
-      commands.execute(CommandIDs.saveState);
-    };
 
     commands.addCommand(CommandIDs.loadState, {
       execute: async (args: IRouter.ILocation) => {
@@ -394,10 +447,21 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
         const clone =
           typeof query['clone'] === 'string'
             ? query['clone'] === ''
-              ? urls.defaultWorkspace
+              ? URLExt.join(urls.base, urls.app)
               : URLExt.join(urls.base, urls.workspaces, query['clone'])
             : null;
-        const source = clone || workspace;
+        const source = clone || workspace || null;
+
+        if (source === null) {
+          console.error(`${CommandIDs.loadState} cannot load null workspace.`);
+          return;
+        }
+
+        // Any time the local state database changes, save the workspace.
+        db.changed.connect(
+          () => void save.invoke(),
+          db
+        );
 
         try {
           const saved = await workspaces.fetch(source);
@@ -408,8 +472,8 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
             resolved = true;
             transform.resolve({ type: 'overwrite', contents: saved.data });
           }
-        } catch (error) {
-          console.warn(`Fetching workspace (${workspace}) failed:`, error);
+        } catch ({ message }) {
+          console.log(`Fetching workspace "${workspace}" failed.`, message);
 
           // If the workspace does not exist, cancel the data transformation
           // and save a workspace with the current user state data.
@@ -419,54 +483,31 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
           }
         }
 
-        // Any time the local state database changes, save the workspace.
-        if (workspace) {
-          db.changed.connect(
-            listener,
-            db
-          );
-        }
-
-        const immediate = true;
-
         if (source === clone) {
           // Maintain the query string parameters but remove `clone`.
           delete query['clone'];
 
           const url = path + URLExt.objectToQueryString(query) + hash;
-          const cloned = commands
-            .execute(CommandIDs.saveState, { immediate })
-            .then(() => router.stop);
+          const cloned = save.invoke().then(() => router.stop);
 
           // After the state has been cloned, navigate to the URL.
-          cloned.then(() => {
-            router.navigate(url, { silent: true });
+          void cloned.then(() => {
+            router.navigate(url);
           });
 
           return cloned;
         }
 
         // After the state database has finished loading, save it.
-        return commands.execute(CommandIDs.saveState, { immediate });
+        await save.invoke();
       }
-    });
-
-    router.register({
-      command: CommandIDs.loadState,
-      pattern: /.?/,
-      rank: 20 // Very high priority: 20:100.
     });
 
     commands.addCommand(CommandIDs.reset, {
       label: 'Reset Application State',
       execute: async () => {
-        const global = true;
-
-        try {
-          await commands.execute(CommandIDs.recoverState, { global });
-        } catch (error) {
-          /* Ignore failures and redirect. */
-        }
+        await db.clear();
+        await save.invoke();
         router.reload();
       }
     });
@@ -500,21 +541,17 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
         // Maintain the query string parameters but remove `reset`.
         delete query['reset'];
 
-        const silent = true;
-        const hard = true;
         const url = path + URLExt.objectToQueryString(query) + hash;
-        const cleared = commands
-          .execute(CommandIDs.recoverState)
-          .then(() => router.stop); // Stop routing before new route navigation.
+        const cleared = db.clear().then(() => router.stop);
 
         // After the state has been reset, navigate to the URL.
         if (clone) {
-          cleared.then(() => {
-            router.navigate(url, { silent, hard });
+          void cleared.then(() => {
+            router.navigate(url, { hard: true });
           });
         } else {
-          cleared.then(() => {
-            router.navigate(url, { silent });
+          void cleared.then(() => {
+            router.navigate(url);
             loading.dispose();
           });
         }
@@ -524,18 +561,15 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
     });
 
     router.register({
-      command: CommandIDs.resetOnLoad,
-      pattern: /(\?reset|\&reset)($|&)/,
-      rank: 10 // Very high priority: 10:100.
+      command: CommandIDs.loadState,
+      pattern: /.?/,
+      rank: 30 // High priority: 30:100.
     });
 
-    // Clean up state database when the window unloads.
-    window.addEventListener('beforeunload', () => {
-      const silent = true;
-
-      db.clear(silent).catch(() => {
-        /* no-op */
-      });
+    router.register({
+      command: CommandIDs.resetOnLoad,
+      pattern: /(\?reset|\&reset)($|&)/,
+      rank: 20 // High priority: 20:100.
     });
 
     return db;
@@ -553,7 +587,8 @@ const plugins: JupyterFrontEndPlugin<any>[] = [
   state,
   splash,
   themes,
-  themesPaletteMenu
+  themesPaletteMenu,
+  print
 ];
 export default plugins;
 
@@ -569,196 +604,11 @@ namespace Private {
    * @returns A workspace name candidate.
    */
   export function candidate(
-    paths: JupyterFrontEnd.IPaths,
+    { urls }: JupyterFrontEnd.IPaths,
     workspace = ''
   ): string {
     return workspace
-      ? URLExt.join(paths.urls.base, paths.urls.workspaces, workspace)
-      : paths.urls.defaultWorkspace;
-  }
-
-  /**
-   * Create a splash element.
-   */
-  function createSplash(): HTMLElement {
-    const splash = document.createElement('div');
-    const galaxy = document.createElement('div');
-    const logo = document.createElement('div');
-
-    splash.id = 'jupyterlab-splash';
-    galaxy.id = 'galaxy';
-    logo.id = 'main-logo';
-
-    galaxy.appendChild(logo);
-    ['1', '2', '3'].forEach(id => {
-      const moon = document.createElement('div');
-      const planet = document.createElement('div');
-
-      moon.id = `moon${id}`;
-      moon.className = 'moon orbit';
-      planet.id = `planet${id}`;
-      planet.className = 'planet';
-
-      moon.appendChild(planet);
-      galaxy.appendChild(moon);
-    });
-
-    splash.appendChild(galaxy);
-
-    return splash;
-  }
-
-  /**
-   * A debouncer for recovery attempts.
-   */
-  let debouncer = 0;
-
-  /**
-   * The recovery dialog.
-   */
-  let dialog: Dialog<any>;
-
-  /**
-   * Allows the user to clear state if splash screen takes too long.
-   */
-  function recover(fn: () => void): void {
-    if (dialog) {
-      return;
-    }
-
-    dialog = new Dialog({
-      title: 'Loading...',
-      body: `The loading screen is taking a long time.
-        Would you like to clear the workspace or keep waiting?`,
-      buttons: [
-        Dialog.cancelButton({ label: 'Keep Waiting' }),
-        Dialog.warnButton({ label: 'Clear Workspace' })
-      ]
-    });
-
-    dialog
-      .launch()
-      .then(result => {
-        if (result.button.accept) {
-          return fn();
-        }
-
-        dialog.dispose();
-        dialog = null;
-
-        debouncer = window.setTimeout(() => {
-          recover(fn);
-        }, SPLASH_RECOVER_TIMEOUT);
-      })
-      .catch(() => {
-        /* no-op */
-      });
-  }
-
-  /**
-   * Allows the user to clear state if splash screen takes too long.
-   */
-  export async function redirect(
-    router: IRouter,
-    paths: JupyterFrontEnd.IPaths,
-    workspacePattern: RegExp,
-    warn = false
-  ): Promise<void> {
-    const form = createRedirectForm(warn);
-    const dialog = new Dialog({
-      title: 'Please use a different workspace.',
-      body: form,
-      focusNodeSelector: 'input',
-      buttons: [Dialog.okButton({ label: 'Switch Workspace' })]
-    });
-    const result = await dialog.launch();
-
-    dialog.dispose();
-    if (!result.value) {
-      return redirect(router, paths, workspacePattern, true);
-    }
-
-    // Navigate to a new workspace URL and abandon this session altogether.
-    const page = paths.urls.page;
-    const workspaces = paths.urls.workspaces;
-    const match = router.current.path.match(workspacePattern);
-    const workspace = (match && decodeURIComponent(match[1])) || '';
-    const prefix = (workspace ? workspaces : page).length + workspace.length;
-    const rest = router.current.request.substring(prefix);
-    const url = URLExt.join(workspaces, result.value, rest);
-
-    router.navigate(url, { hard: true, silent: true });
-
-    // This promise will never resolve because the application navigates
-    // away to a new location. It only exists to satisfy the return type
-    // of the `redirect` function.
-    return new Promise<void>(() => undefined);
-  }
-
-  /**
-   * The splash element.
-   */
-  const splash = createSplash();
-
-  /**
-   * The splash screen counter.
-   */
-  let splashCount = 0;
-
-  /**
-   * Show the splash element.
-   *
-   * @param ready - A promise that must be resolved before splash disappears.
-   *
-   * @param commands - The application's command registry.
-   *
-   * @param recovery - A command that recovers from a hanging splash.
-   *
-   * @param light - A flag indicating whether the theme is light or dark.
-   */
-  export function showSplash(
-    ready: Promise<any>,
-    commands: CommandRegistry,
-    recovery: string,
-    light: boolean
-  ): IDisposable {
-    splash.classList.remove('splash-fade');
-    splash.classList.toggle('light', light);
-    splash.classList.toggle('dark', !light);
-    splashCount++;
-
-    if (debouncer) {
-      window.clearTimeout(debouncer);
-    }
-    debouncer = window.setTimeout(() => {
-      if (commands.hasCommand(recovery)) {
-        recover(() => {
-          commands.execute(recovery);
-        });
-      }
-    }, SPLASH_RECOVER_TIMEOUT);
-
-    document.body.appendChild(splash);
-
-    return new DisposableDelegate(() => {
-      ready.then(() => {
-        if (--splashCount === 0) {
-          if (debouncer) {
-            window.clearTimeout(debouncer);
-            debouncer = 0;
-          }
-
-          if (dialog) {
-            dialog.dispose();
-            dialog = null;
-          }
-
-          splash.classList.add('splash-fade');
-          window.setTimeout(() => {
-            document.body.removeChild(splash);
-          }, 500);
-        }
-      });
-    });
+      ? URLExt.join(urls.workspaces, workspace)
+      : URLExt.join(urls.app);
   }
 }

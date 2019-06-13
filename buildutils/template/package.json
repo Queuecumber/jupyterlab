@@ -1,10 +1,14 @@
 {
   "name": "@jupyterlab/template",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.11",
   "description": "JupyterLab - Package Template",
   "homepage": "https://github.com/jupyterlab/jupyterlab",
   "bugs": {
     "url": "https://github.com/jupyterlab/jupyterlab/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jupyterlab/jupyterlab.git"
   },
   "license": "BSD-3-Clause",
   "author": "Project Jupyter",
@@ -13,14 +17,13 @@
     "schema/*.json",
     "style/**/*.{css,eot,gif,html,jpg,json,png,svg,woff2,ttf}"
   ],
+  "sideEffects": [
+    "style/**/*"
+  ],
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "directories": {
     "lib": "lib/"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jupyterlab/jupyterlab.git"
   },
   "scripts": {
     "build": "tsc",
@@ -30,10 +33,9 @@
   },
   "devDependencies": {
     "rimraf": "~2.6.2",
-    "typescript": "~3.3.1"
+    "typescript": "~3.5.1"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "gitHead": "31f68f6d1717b58c344a5fb4f4baf3b123b7c75c"
+  }
 }

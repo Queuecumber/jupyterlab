@@ -28,8 +28,6 @@ import { Widget } from '@phosphor/widgets';
 
 import * as React from 'react';
 
-import '../style/index.css';
-
 /**
  * The class name added to Launcher instances.
  */
@@ -359,7 +357,7 @@ function Card(
       return;
     }
     launcher.pending = true;
-    commands
+    void commands
       .execute(command, {
         ...item.args,
         cwd: launcher.cwd
@@ -373,7 +371,7 @@ function Card(
       })
       .catch(err => {
         launcher.pending = false;
-        showErrorMessage('Launcher Error', err);
+        void showErrorMessage('Launcher Error', err);
       });
   };
 

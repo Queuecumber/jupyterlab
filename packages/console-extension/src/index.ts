@@ -20,7 +20,7 @@ import { IEditorServices } from '@jupyterlab/codeeditor';
 
 import { ConsolePanel, IConsoleTracker } from '@jupyterlab/console';
 
-import { ISettingRegistry, PageConfig } from '@jupyterlab/coreutils';
+import { ISettingRegistry, PageConfig, URLExt } from '@jupyterlab/coreutils';
 
 import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
@@ -39,7 +39,7 @@ import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
 
 import { find } from '@phosphor/algorithm';
 
-import { ReadonlyJSONObject } from '@phosphor/coreutils';
+import { ReadonlyJSONObject, JSONObject } from '@phosphor/coreutils';
 
 import { DisposableSet } from '@phosphor/disposable';
 
@@ -163,7 +163,7 @@ async function activateConsole(
 
   // Add a launcher item if the launcher is available.
   if (launcher) {
-    manager.ready.then(() => {
+    void manager.ready.then(() => {
       let disposables: DisposableSet | null = null;
       const onSpecsChanged = () => {
         if (disposables) {
@@ -181,7 +181,7 @@ async function activateConsole(
           let kernelIconUrl = specs.kernelspecs[name].resources['logo-64x64'];
           if (kernelIconUrl) {
             let index = kernelIconUrl.indexOf('kernelspecs');
-            kernelIconUrl = baseUrl + kernelIconUrl.slice(index);
+            kernelIconUrl = URLExt.join(baseUrl, kernelIconUrl.slice(index));
           }
           disposables.add(
             launcher.add({
@@ -245,10 +245,9 @@ async function activateConsole(
     )).composite as string;
     panel.console.node.dataset.jpInteractionMode = interactionMode;
 
-    await panel.session.ready;
-
-    // Add the console panel to the tracker.
-    tracker.add(panel);
+    // Add the console panel to the tracker. We want the panel to show up before
+    // any kernel selection dialog, so we do not await panel.session.ready;
+    await tracker.add(panel);
     panel.session.propertyChanged.connect(() => tracker.save(panel));
 
     shell.add(panel, 'main', {
@@ -270,7 +269,7 @@ async function activateConsole(
   }
   settingRegistry.pluginChanged.connect((sender, plugin) => {
     if (plugin === pluginId) {
-      updateSettings();
+      void updateSettings();
     }
   });
   await updateSettings();
@@ -385,7 +384,7 @@ async function activateConsole(
       if (!current) {
         return;
       }
-      current.console.execute(true);
+      return current.console.execute(true);
     },
     isEnabled
   });
@@ -430,20 +429,21 @@ async function activateConsole(
   });
 
   commands.addCommand(CommandIDs.closeAndShutdown, {
-    label: 'Close and Shutdown…',
+    label: 'Close and Shut Down…',
     execute: args => {
       const current = getCurrent(args);
       if (!current) {
         return;
       }
       return showDialog({
-        title: 'Shutdown the console?',
+        title: 'Shut down the console?',
         body: `Are you sure you want to close "${current.title.label}"?`,
         buttons: [Dialog.cancelButton(), Dialog.warnButton()]
       }).then(result => {
         if (result.button.accept) {
-          current.console.session.shutdown().then(() => {
+          return current.console.session.shutdown().then(() => {
             current.dispose();
+            return true;
           });
         } else {
           return false;
@@ -461,7 +461,10 @@ async function activateConsole(
           if (args['activate'] !== false) {
             shell.activateById(widget.id);
           }
-          widget.console.inject(args['code'] as string);
+          void widget.console.inject(
+            args['code'] as string,
+            args['metadata'] as JSONObject
+          );
           return true;
         }
         return false;
@@ -507,12 +510,12 @@ async function activateConsole(
     name: 'Console',
     closeAndCleanup: (current: ConsolePanel) => {
       return showDialog({
-        title: 'Shutdown the console?',
+        title: 'Shut down the console?',
         body: `Are you sure you want to close "${current.title.label}"?`,
         buttons: [Dialog.cancelButton(), Dialog.warnButton()]
       }).then(result => {
         if (result.button.accept) {
-          current.console.session.shutdown().then(() => {
+          return current.console.session.shutdown().then(() => {
             current.dispose();
           });
         } else {

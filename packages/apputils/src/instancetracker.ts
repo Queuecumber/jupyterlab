@@ -7,7 +7,7 @@ import { ArrayExt, each, find } from '@phosphor/algorithm';
 
 import { CommandRegistry } from '@phosphor/commands';
 
-import { ReadonlyJSONObject } from '@phosphor/coreutils';
+import { PromiseDelegate, ReadonlyJSONObject } from '@phosphor/coreutils';
 
 import { IDisposable } from '@phosphor/disposable';
 
@@ -51,6 +51,19 @@ export interface IInstanceTracker<T extends Widget> extends IDisposable {
    * The number of widgets held by the tracker.
    */
   readonly size: number;
+
+  /**
+   * A promise that is resolved when the instance tracker has been
+   * restored from a serialized state.
+   *
+   * #### Notes
+   * Most client code will not need to use this, since they can wait
+   * for the whole application to restore. However, if an extension
+   * wants to perform actions during the application restoration, but
+   * after the restoration of another instance tracker, they can use
+   * this promise.
+   */
+  readonly restored: Promise<void>;
 
   /**
    * Find the first widget in the tracker that satisfies a filter function.
@@ -168,6 +181,13 @@ export class InstanceTracker<T extends Widget>
   }
 
   /**
+   * A promise resolved when the instance tracker has been restored.
+   */
+  get restored(): Promise<void> {
+    return this._restored.promise;
+  }
+
+  /**
    * The number of widgets held by the tracker.
    */
   get size(): number {
@@ -178,6 +198,12 @@ export class InstanceTracker<T extends Widget>
    * Add a new widget to the tracker.
    *
    * @param widget - The widget being added.
+   *
+   * #### Notes
+   * When a widget is added its state is saved to the state database.
+   * This function returns a promise that is resolved when that saving
+   * is completed. However, the widget is added to the in-memory tracker
+   * synchronously, and is available to use before the promise is resolved.
    */
   add(widget: T): Promise<void> {
     if (widget.isDisposed) {
@@ -300,7 +326,7 @@ export class InstanceTracker<T extends Widget>
    */
   inject(widget: T): void {
     Private.injectedProperty.set(widget, true);
-    this.add(widget);
+    void this.add(widget);
   }
 
   /**
@@ -325,7 +351,11 @@ export class InstanceTracker<T extends Widget>
    * multiple instance trackers and, when ready, asks them each to restore their
    * respective widgets.
    */
-  restore(options: InstanceTracker.IRestoreOptions<T>): Promise<any> {
+  async restore(options: InstanceTracker.IRestoreOptions<T>): Promise<any> {
+    if (this._hasRestored) {
+      throw new Error('Instance tracker has already restored');
+    }
+    this._hasRestored = true;
     const { command, registry, state, when } = options;
     const namespace = this.namespace;
     const promises = when
@@ -334,20 +364,21 @@ export class InstanceTracker<T extends Widget>
 
     this._restore = options;
 
-    return Promise.all(promises).then(([saved]) => {
-      return Promise.all(
-        saved.ids.map((id, index) => {
-          const value = saved.values[index];
-          const args = value && (value as any).data;
-          if (args === undefined) {
-            return state.remove(id);
-          }
+    const [saved] = await Promise.all(promises);
+    const values = await Promise.all(
+      saved.ids.map((id, index) => {
+        const value = saved.values[index];
+        const args = value && (value as any).data;
+        if (args === undefined) {
+          return state.remove(id);
+        }
 
-          // Execute the command and if it fails, delete the state restore data.
-          return registry.execute(command, args).catch(() => state.remove(id));
-        })
-      );
-    });
+        // Execute the command and if it fails, delete the state restore data.
+        return registry.execute(command, args).catch(() => state.remove(id));
+      })
+    );
+    this._restored.resolve(undefined);
+    return values;
   }
 
   /**
@@ -355,7 +386,7 @@ export class InstanceTracker<T extends Widget>
    *
    * @param widget - The widget being saved.
    */
-  save(widget: T): void {
+  async save(widget: T): Promise<void> {
     const injected = Private.injectedProperty.get(widget);
 
     if (!this._restore || !this.has(widget) || injected) {
@@ -368,7 +399,7 @@ export class InstanceTracker<T extends Widget>
     const newName = widgetName ? `${this.namespace}:${widgetName}` : '';
 
     if (oldName && oldName !== newName) {
-      state.remove(oldName);
+      await state.remove(oldName);
     }
 
     // Set the name property irrespective of whether the new name is null.
@@ -376,7 +407,7 @@ export class InstanceTracker<T extends Widget>
 
     if (newName) {
       const data = this._restore.args(widget);
-      state.save(newName, { data });
+      await state.save(newName, { data });
     }
 
     if (oldName !== newName) {
@@ -430,8 +461,8 @@ export class InstanceTracker<T extends Widget>
         this._tracker.currentWidget ||
         this._widgets[this._widgets.length - 1] ||
         null;
-      this._currentChanged.emit(this._currentWidget);
       this.onCurrentChanged(this._currentWidget);
+      this._currentChanged.emit(this._currentWidget);
     }
 
     // If there is no restore data, return.
@@ -443,11 +474,13 @@ export class InstanceTracker<T extends Widget>
     const name = Private.nameProperty.get(widget);
 
     if (name) {
-      state.remove(name);
+      void state.remove(name);
     }
   }
 
+  private _hasRestored = false;
   private _restore: InstanceTracker.IRestoreOptions<T> | null = null;
+  private _restored = new PromiseDelegate<void>();
   private _tracker = new FocusTracker<T>();
   private _currentChanged = new Signal<this, T | null>(this);
   private _widgetAdded = new Signal<this, T>(this);

@@ -79,7 +79,7 @@ export class ConsoleHistory implements IConsoleHistory {
    */
   constructor(options: ConsoleHistory.IOptions) {
     this.session = options.session;
-    this._handleKernel();
+    void this._handleKernel();
     this.session.kernelChanged.connect(
       this._handleKernel,
       this
@@ -233,10 +233,12 @@ export class ConsoleHistory implements IConsoleHistory {
     this._history.length = 0;
     let last = '';
     let current = '';
-    for (let i = 0; i < value.content.history.length; i++) {
-      current = (value.content.history[i] as string[])[2];
-      if (current !== last) {
-        this._history.push((last = current));
+    if (value.content.status === 'ok') {
+      for (let i = 0; i < value.content.history.length; i++) {
+        current = (value.content.history[i] as string[])[2];
+        if (current !== last) {
+          this._history.push((last = current));
+        }
       }
     }
     // Reset the history navigation cursor back to the bottom.
@@ -265,7 +267,7 @@ export class ConsoleHistory implements IConsoleHistory {
     let source = model.value.text;
 
     if (location === 'top' || location === 'topLine') {
-      this.back(source).then(value => {
+      void this.back(source).then(value => {
         if (this.isDisposed || !value) {
           return;
         }
@@ -282,7 +284,7 @@ export class ConsoleHistory implements IConsoleHistory {
         editor.setCursorPosition({ line: 0, column: columnPos });
       });
     } else {
-      this.forward(source).then(value => {
+      void this.forward(source).then(value => {
         if (this.isDisposed) {
           return;
         }
@@ -303,14 +305,14 @@ export class ConsoleHistory implements IConsoleHistory {
   /**
    * Handle the current kernel changing.
    */
-  private _handleKernel(): void {
+  private async _handleKernel(): Promise<void> {
     let kernel = this.session.kernel;
     if (!kernel) {
       this._history.length = 0;
       return;
     }
 
-    kernel.requestHistory(Private.initialRequest).then(v => {
+    return kernel.requestHistory(Private.initialRequest).then(v => {
       this.onHistory(v);
     });
   }
@@ -369,7 +371,7 @@ export namespace ConsoleHistory {
  * A namespace for private data.
  */
 namespace Private {
-  export const initialRequest: KernelMessage.IHistoryRequest = {
+  export const initialRequest: KernelMessage.IHistoryRequestMsg['content'] = {
     output: false,
     raw: true,
     hist_access_type: 'tail',

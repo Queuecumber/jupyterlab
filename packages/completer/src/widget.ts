@@ -1,6 +1,10 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
+import { HoverBox, defaultSanitizer } from '@jupyterlab/apputils';
+
+import { CodeEditor } from '@jupyterlab/codeeditor';
+
 import { IIterator, IterableOrArrayLike, toArray } from '@phosphor/algorithm';
 
 import { JSONObject, JSONExt } from '@phosphor/coreutils';
@@ -14,10 +18,6 @@ import { Message } from '@phosphor/messaging';
 import { ISignal, Signal } from '@phosphor/signaling';
 
 import { Widget } from '@phosphor/widgets';
-
-import { HoverBox, defaultSanitizer } from '@jupyterlab/apputils';
-
-import { CodeEditor } from '@jupyterlab/codeeditor';
 
 /**
  * The class name added to completer menu items.
@@ -238,6 +238,17 @@ export class Completer extends Widget {
         this.hide();
         this._visibilityChanged.emit(undefined);
       }
+      return;
+    }
+
+    // If there is only one option, signal and bail.
+    // We don't test the filtered `items`, as that
+    // is too aggressive of completer behavior, it can
+    // lead to double typing of an option.
+    const options = toArray(model.options());
+    if (options.length === 1) {
+      this._selected.emit(options[0]);
+      this.reset();
       return;
     }
 
@@ -654,14 +665,19 @@ export namespace Completer {
    */
   export interface IPatch {
     /**
-     * The patched text.
+     * The start of the range to be patched.
      */
-    text: string;
+    start: number;
 
     /**
-     * The offset of the cursor.
+     * The end of the range to be patched.
      */
-    offset: number;
+    end: number;
+
+    /**
+     * The value to be patched in.
+     */
+    value: string;
   }
 
   /**

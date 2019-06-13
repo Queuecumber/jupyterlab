@@ -12,8 +12,7 @@ import { nbformat } from '@jupyterlab/coreutils';
 import {
   IObservableList,
   ObservableList,
-  IObservableValue,
-  IModelDB
+  IObservableValue
 } from '@jupyterlab/observables';
 
 import { IOutputModel, OutputModel } from '@jupyterlab/rendermime';
@@ -111,11 +110,6 @@ export namespace IOutputAreaModel {
      * If not given, a default factory will be used.
      */
     contentFactory?: IContentFactory;
-
-    /**
-     * An optional IModelDB to store the output area model.
-     */
-    modelDB?: IModelDB;
   }
 
   /**
@@ -155,22 +149,6 @@ export class OutputAreaModel implements IOutputAreaModel {
       this._onListChanged,
       this
     );
-
-    // If we are given a IModelDB, keep an up-to-date
-    // serialized copy of the OutputAreaModel in it.
-    if (options.modelDB) {
-      this._modelDB = options.modelDB;
-      this._serialized = this._modelDB.createValue('outputs');
-      if (this._serialized.get()) {
-        this.fromJSON(this._serialized.get() as nbformat.IOutput[]);
-      } else {
-        this._serialized.set(this.toJSON());
-      }
-      this._serialized.changed.connect(
-        this._onSerializedChanged,
-        this
-      );
-    }
   }
 
   /**
@@ -257,7 +235,7 @@ export class OutputAreaModel implements IOutputAreaModel {
    */
   set(index: number, value: nbformat.IOutput): void {
     // Normalize stream data.
-    this._normalize(value);
+    Private.normalize(value);
     let item = this._createItem({ value, trusted: this._trusted });
     this.list.set(index, item);
   }
@@ -323,7 +301,7 @@ export class OutputAreaModel implements IOutputAreaModel {
     let trusted = this._trusted;
 
     // Normalize the value.
-    this._normalize(value);
+    Private.normalize(value);
 
     // Consolidate outputs if they are stream outputs of the same kind.
     if (
@@ -335,8 +313,8 @@ export class OutputAreaModel implements IOutputAreaModel {
       // text to the current item and replace the previous item.
       // This also replaces the metadata of the last item.
       this._lastStream += value.text as string;
+      this._lastStream = Private.removeOverwrittenChars(this._lastStream);
       value.text = this._lastStream;
-      this._removeOverwrittenChars(value);
       let item = this._createItem({ value, trusted });
       let index = this.length - 1;
       let prev = this.list.get(index);
@@ -346,7 +324,7 @@ export class OutputAreaModel implements IOutputAreaModel {
     }
 
     if (nbformat.isStream(value)) {
-      this._removeOverwrittenChars(value);
+      value.text = Private.removeOverwrittenChars(value.text as string);
     }
 
     // Create the new item.
@@ -365,53 +343,15 @@ export class OutputAreaModel implements IOutputAreaModel {
   }
 
   /**
-   * Normalize an output.
+   * A flag that is set when we want to clear the output area
+   * *after* the next addition to it.
    */
-  private _normalize(value: nbformat.IOutput): void {
-    if (nbformat.isStream(value)) {
-      if (Array.isArray(value.text)) {
-        value.text = (value.text as string[]).join('\n');
-      }
-    }
-  }
-
-  /**
-   * Remove characters that are overridden by backspace characters.
-   */
-  private _fixBackspace(txt: string): string {
-    let tmp = txt;
-    do {
-      txt = tmp;
-      // Cancel out anything-but-newline followed by backspace
-      tmp = txt.replace(/[^\n]\x08/gm, '');
-    } while (tmp.length < txt.length);
-    return txt;
-  }
-
-  /**
-   * Remove chunks that should be overridden by the effect of
-   * carriage return characters.
-   */
-  private _fixCarriageReturn(txt: string): string {
-    txt = txt.replace(/\r+\n/gm, '\n'); // \r followed by \n --> newline
-    while (txt.search(/\r[^$]/g) > -1) {
-      const base = txt.match(/^(.*)\r+/m)[1];
-      let insert = txt.match(/\r+(.*)$/m)[1];
-      insert = insert + base.slice(insert.length, base.length);
-      txt = txt.replace(/\r+.*$/m, '\r').replace(/^.*\r/m, insert);
-    }
-    return txt;
-  }
-
-  /*
-   * Remove characters overridden by backspaces and carriage returns
-   */
-  private _removeOverwrittenChars(value: nbformat.IOutput): void {
-    let tmp = value.text as string;
-    value.text = this._fixCarriageReturn(this._fixBackspace(tmp));
-  }
-
   protected clearNext = false;
+
+  /**
+   * An observable list containing the output models
+   * for this output area.
+   */
   protected list: IObservableList<IOutputModel> = null;
 
   /**
@@ -434,11 +374,6 @@ export class OutputAreaModel implements IOutputAreaModel {
     sender: IObservableList<IOutputModel>,
     args: IObservableList.IChangedArgs<IOutputModel>
   ) {
-    if (this._serialized && !this._changeGuard) {
-      this._changeGuard = true;
-      this._serialized.set(this.toJSON());
-      this._changeGuard = false;
-    }
     this._changed.emit(args);
   }
 
@@ -470,8 +405,6 @@ export class OutputAreaModel implements IOutputAreaModel {
   private _isDisposed = false;
   private _stateChanged = new Signal<IOutputAreaModel, void>(this);
   private _changed = new Signal<this, IOutputAreaModel.ChangedArgs>(this);
-  private _modelDB: IModelDB = null;
-  private _serialized: IObservableValue = null;
   private _changeGuard = false;
 }
 
@@ -495,4 +428,55 @@ export namespace OutputAreaModel {
    * The default output model factory.
    */
   export const defaultContentFactory = new ContentFactory();
+}
+
+/**
+ * A namespace for module-private functionality.
+ */
+namespace Private {
+  /**
+   * Normalize an output.
+   */
+  export function normalize(value: nbformat.IOutput): void {
+    if (nbformat.isStream(value)) {
+      if (Array.isArray(value.text)) {
+        value.text = (value.text as string[]).join('\n');
+      }
+    }
+  }
+
+  /**
+   * Remove characters that are overridden by backspace characters.
+   */
+  function fixBackspace(txt: string): string {
+    let tmp = txt;
+    do {
+      txt = tmp;
+      // Cancel out anything-but-newline followed by backspace
+      tmp = txt.replace(/[^\n]\x08/gm, '');
+    } while (tmp.length < txt.length);
+    return txt;
+  }
+
+  /**
+   * Remove chunks that should be overridden by the effect of
+   * carriage return characters.
+   */
+  function fixCarriageReturn(txt: string): string {
+    txt = txt.replace(/\r+\n/gm, '\n'); // \r followed by \n --> newline
+    while (txt.search(/\r[^$]/g) > -1) {
+      const base = txt.match(/^(.*)\r+/m)[1];
+      let insert = txt.match(/\r+(.*)$/m)[1];
+      insert = insert + base.slice(insert.length, base.length);
+      txt = txt.replace(/\r+.*$/m, '\r').replace(/^.*\r/m, insert);
+    }
+    return txt;
+  }
+
+  /*
+   * Remove characters overridden by backspaces and carriage returns
+   */
+  export function removeOverwrittenChars(text: string): string {
+    return fixCarriageReturn(fixBackspace(text));
+  }
 }

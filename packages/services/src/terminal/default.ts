@@ -314,13 +314,11 @@ export namespace DefaultTerminalSession {
       if (response.status === 404) {
         return response.json().then(data => {
           console.warn(data['message']);
-          Private.killTerminal(url);
         });
       }
       if (response.status !== 204) {
         throw new ServerConnection.ResponseError(response);
       }
-      Private.killTerminal(url);
     });
   }
 
@@ -331,15 +329,12 @@ export namespace DefaultTerminalSession {
    *
    * @returns A promise that resolves when all the sessions are shut down.
    */
-  export function shutdownAll(
+  export async function shutdownAll(
     settings?: ServerConnection.ISettings
   ): Promise<void> {
     settings = settings || ServerConnection.makeSettings();
-    return listRunning(settings).then(running => {
-      each(running, s => {
-        shutdown(s.name, settings);
-      });
-    });
+    const running = await listRunning(settings);
+    await Promise.all(running.map(s => shutdown(s.name, settings)));
   }
 }
 
@@ -371,16 +366,5 @@ namespace Private {
    */
   export function getServiceUrl(baseUrl: string): string {
     return URLExt.join(baseUrl, TERMINAL_SERVICE_URL);
-  }
-
-  /**
-   * Kill a terminal by url.
-   */
-  export function killTerminal(url: string): void {
-    // Update the local data store.
-    if (Private.running[url]) {
-      let session = Private.running[url];
-      session.dispose();
-    }
   }
 }

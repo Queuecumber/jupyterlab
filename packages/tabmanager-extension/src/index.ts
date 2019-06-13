@@ -12,8 +12,6 @@ import { each } from '@phosphor/algorithm';
 
 import { TabBar, Widget } from '@phosphor/widgets';
 
-import '../style/index.css';
-
 /**
  * The default tab manager extension.
  */
@@ -39,7 +37,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     tabs.node.insertBefore(header, tabs.contentNode);
     shell.add(tabs, 'left', { rank: 600 });
 
-    app.restored.then(() => {
+    void app.restored.then(() => {
       const populate = () => {
         tabs.clearTabs();
         each(shell.widgets('main'), widget => {

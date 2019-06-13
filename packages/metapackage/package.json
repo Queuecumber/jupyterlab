@@ -1,10 +1,14 @@
 {
   "name": "@jupyterlab/metapackage",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.12",
   "description": "JupyterLab - Meta Package.  All of the packages used by the core JupyterLab application",
   "homepage": "https://github.com/jupyterlab/jupyterlab",
   "bugs": {
     "url": "https://github.com/jupyterlab/jupyterlab/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jupyterlab/jupyterlab.git"
   },
   "license": "BSD-3-Clause",
   "author": "Project Jupyter",
@@ -13,14 +17,11 @@
     "lib/*.js.map",
     "lib/*.js"
   ],
+  "sideEffects": false,
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "directories": {
     "lib": "lib/"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jupyterlab/jupyterlab.git"
   },
   "scripts": {
     "build": "tsc -b",
@@ -105,13 +106,12 @@
     "@jupyterlab/vega4-extension": "^1.0.0-alpha.3"
   },
   "devDependencies": {
-    "fs-extra": "~4.0.2",
+    "fs-extra": "^8.0.1",
     "rimraf": "~2.6.2",
     "typedoc": "^0.14.2",
-    "typescript": "~3.3.1"
+    "typescript": "~3.5.1"
   },
   "publishConfig": {
     "access": "public"
-  },
-  "gitHead": "31f68f6d1717b58c344a5fb4f4baf3b123b7c75c"
+  }
 }

@@ -80,7 +80,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         });
 
         // Save the reconciled list.
-        settings.set('shortcuts', shortcuts);
+        void settings.set('shortcuts', shortcuts);
       };
 
       if (!keys.length) {
@@ -101,7 +101,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
       port(deprecated);
 
       // Remove all old shortcuts;
-      old.save('{}');
+      void old.save('{}');
     } catch (error) {
       console.error(`Loading ${plugin.id} failed.`, error);
     }
@@ -164,7 +164,21 @@ const shortcuts: JupyterFrontEndPlugin<void> = {
         .sort((a, b) => a.command.localeCompare(b.command));
       schema.properties.shortcuts.title =
         'List of Commands (followed by shortcuts)';
+
+      const disableShortcutInstructions = `Note: To disable a system default shortcut,
+copy it to User Preferences and add the
+"disabled" key, for example:
+{
+    "command": "application:activate-next-tab",
+    "keys": [
+        "Ctrl Shift ]"
+    ],
+    "selector": "body",
+    "disabled": true
+}`;
       schema.properties.shortcuts.description = `${commands}
+
+${disableShortcutInstructions}
 
 List of Keyboard Shortcuts`;
     }

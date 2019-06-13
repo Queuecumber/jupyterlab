@@ -238,14 +238,15 @@ export namespace JupyterLab {
   export const defaultPaths: JupyterFrontEnd.IPaths = {
     urls: {
       base: PageConfig.getOption('baseUrl'),
-      defaultWorkspace: PageConfig.getOption('defaultWorkspace'),
       notFound: PageConfig.getOption('notFoundUrl'),
-      page: PageConfig.getOption('pageUrl'),
-      public: PageConfig.getOption('publicUrl'),
+      app: PageConfig.getOption('appUrl'),
+      static: PageConfig.getOption('staticUrl'),
       settings: PageConfig.getOption('settingsUrl'),
       themes: PageConfig.getOption('themesUrl'),
       tree: PageConfig.getOption('treeUrl'),
-      workspaces: PageConfig.getOption('workspacesUrl')
+      workspaces: PageConfig.getOption('workspacesUrl'),
+      hubHost: PageConfig.getOption('hubHost') || undefined,
+      hubPrefix: PageConfig.getOption('hubPrefix') || undefined
     },
     directories: {
       appSettings: PageConfig.getOption('appSettingsDir'),
