@@ -12,7 +12,8 @@ import { nbformat } from '@jupyterlab/coreutils';
 import {
   IObservableList,
   ObservableList,
-  IObservableValue
+  IObservableValue,
+  IModelDB
 } from '@jupyterlab/observables';
 
 import { IOutputModel, OutputModel } from '@jupyterlab/rendermime';
@@ -110,6 +111,11 @@ export namespace IOutputAreaModel {
      * If not given, a default factory will be used.
      */
     contentFactory?: IContentFactory;
+
+    /**
+     * An optional IModelDB to store the output area model.
+     */
+    modelDB?: IModelDB;
   }
 
   /**
@@ -145,10 +151,20 @@ export class OutputAreaModel implements IOutputAreaModel {
         this._add(value);
       });
     }
-    this.list.changed.connect(
-      this._onListChanged,
-      this
-    );
+    this.list.changed.connect(this._onListChanged, this);
+
+    // If we are given a IModelDB, keep an up-to-date
+    // serialized copy of the OutputAreaModel in it.
+    if (options.modelDB) {
+      this._modelDB = options.modelDB;
+      this._serialized = this._modelDB.createValue('outputs');
+      if (this._serialized.get()) {
+        this.fromJSON(this._serialized.get() as nbformat.IOutput[]);
+      } else {
+        this._serialized.set(this.toJSON());
+      }
+      this._serialized.changed.connect(this._onSerializedChanged, this);
+    }
   }
 
   /**
@@ -360,10 +376,7 @@ export class OutputAreaModel implements IOutputAreaModel {
   private _createItem(options: IOutputModel.IOptions): IOutputModel {
     let factory = this.contentFactory;
     let item = factory.createOutputModel(options);
-    item.changed.connect(
-      this._onGenericChange,
-      this
-    );
+    item.changed.connect(this._onGenericChange, this);
     return item;
   }
 
@@ -405,6 +418,8 @@ export class OutputAreaModel implements IOutputAreaModel {
   private _isDisposed = false;
   private _stateChanged = new Signal<IOutputAreaModel, void>(this);
   private _changed = new Signal<this, IOutputAreaModel.ChangedArgs>(this);
+  private _modelDB: IModelDB = null;
+  private _serialized: IObservableValue = null;
   private _changeGuard = false;
 }
 

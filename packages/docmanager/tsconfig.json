@@ -16,13 +16,13 @@
       "path": "../docregistry"
     },
     {
+      "path": "../observables"
+    },
+    {
       "path": "../services"
     },
     {
       "path": "../statusbar"
-    },
-    {
-      "path": "../observables"
     }
   ]
 }
