@@ -347,7 +347,7 @@ function Card(
   const args = { ...item.args, cwd: launcher.cwd };
   const caption = commands.caption(command, args);
   const label = commands.label(command, args);
-  const title = caption || label;
+  const title = kernel ? label : caption || label;
 
   // Build the onclick handler.
   let onclick = () => {
@@ -375,38 +375,42 @@ function Card(
       });
   };
 
+  // With tabindex working, you can now pick a kernel by tabbing around and
+  // pressing Enter.
+  let onkeypress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter') {
+      onclick();
+    }
+  };
+
   // Return the VDOM element.
   return (
     <div
       className="jp-LauncherCard"
       title={title}
       onClick={onclick}
+      onKeyPress={onkeypress}
+      tabIndex={100}
       data-category={item.category || 'Other'}
       key={Private.keyProperty.get(item)}
     >
       <div className="jp-LauncherCard-icon">
-        {item.kernelIconUrl &&
-          kernel && (
-            <img src={item.kernelIconUrl} className="jp-Launcher-kernelIcon" />
-          )}
-        {!item.kernelIconUrl &&
-          !kernel && (
-            <div
-              className={`${commands.iconClass(
-                command,
-                args
-              )} jp-Launcher-icon`}
-            />
-          )}
-        {!item.kernelIconUrl &&
-          kernel && (
-            <div className="jp-LauncherCard-noKernelIcon">
-              {label[0].toUpperCase()}
-            </div>
-          )}
+        {item.kernelIconUrl && kernel && (
+          <img src={item.kernelIconUrl} className="jp-Launcher-kernelIcon" />
+        )}
+        {!item.kernelIconUrl && !kernel && (
+          <div
+            className={`${commands.iconClass(command, args)} jp-Launcher-icon`}
+          />
+        )}
+        {!item.kernelIconUrl && kernel && (
+          <div className="jp-LauncherCard-noKernelIcon">
+            {label[0].toUpperCase()}
+          </div>
+        )}
       </div>
       <div className="jp-LauncherCard-label" title={title}>
-        {label}
+        <p>{label}</p>
       </div>
     </div>
   );

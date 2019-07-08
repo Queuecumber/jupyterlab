@@ -242,15 +242,9 @@ export class CellTypeSwitcher extends ReactWidget {
     if (widget.model) {
       this.update();
     }
-    widget.activeCellChanged.connect(
-      this.update,
-      this
-    );
+    widget.activeCellChanged.connect(this.update, this);
     // Follow a change in the selection.
-    widget.selectionChanged.connect(
-      this.update,
-      this
-    );
+    widget.selectionChanged.connect(this.update, this);
   }
 
   /**
@@ -292,6 +286,9 @@ export class CellTypeSwitcher extends ReactWidget {
         onChange={this.handleChange}
         onKeyDown={this.handleKeyDown}
         value={value}
+        iconProps={{
+          icon: <span className="jp-MaterialIcon jp-DownCaretIcon bp3-icon" />
+        }}
         aria-label="Cell type"
         minimal
       >

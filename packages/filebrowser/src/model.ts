@@ -86,14 +86,8 @@ export class FileBrowserModel implements IDisposable {
     const refreshInterval = options.refreshInterval || DEFAULT_REFRESH_INTERVAL;
 
     const { services } = options.manager;
-    services.contents.fileChanged.connect(
-      this._onFileChanged,
-      this
-    );
-    services.sessions.runningChanged.connect(
-      this._onRunningChanged,
-      this
-    );
+    services.contents.fileChanged.connect(this._onFileChanged, this);
+    services.sessions.runningChanged.connect(this._onRunningChanged, this);
 
     this._unloadEventListener = (e: Event) => {
       if (this._uploads.length > 0) {
@@ -320,14 +314,21 @@ export class FileBrowserModel implements IDisposable {
    */
   download(path: string): Promise<void> {
     return this.manager.services.contents.getDownloadUrl(path).then(url => {
-      let element = document.createElement('a');
-      document.body.appendChild(element);
-      element.setAttribute('href', url);
-      element.setAttribute('target', '_blank');
-      element.setAttribute('download', '');
-      element.click();
-      document.body.removeChild(element);
-      return void 0;
+      // Check the browser is Chrome https://stackoverflow.com/a/9851769
+      const chrome = (window as any).chrome;
+      const isChrome = !!chrome && (!!chrome.webstore || !!chrome.runtime);
+      if (isChrome) {
+        // Workaround https://bugs.chromium.org/p/chromium/issues/detail?id=455987
+        window.open(url);
+      } else {
+        let element = document.createElement('a');
+        document.body.appendChild(element);
+        element.setAttribute('href', url);
+        element.setAttribute('download', '');
+        element.click();
+        document.body.removeChild(element);
+        return void 0;
+      }
     });
   }
 
@@ -421,7 +422,7 @@ export class FileBrowserModel implements IDisposable {
       body: `The file size is ${Math.round(
         file.size / (1024 * 1024)
       )} MB. Do you still want to upload it?`,
-      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'UPLOAD' })]
+      buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Upload' })]
     });
     return button.accept;
   }
@@ -589,8 +590,8 @@ export class FileBrowserModel implements IDisposable {
       oldValue && oldValue.path && PathExt.dirname(oldValue.path) === path
         ? oldValue
         : newValue && newValue.path && PathExt.dirname(newValue.path) === path
-          ? newValue
-          : undefined;
+        ? newValue
+        : undefined;
 
     // If either the old value or the new value is in the current path, update.
     if (value) {

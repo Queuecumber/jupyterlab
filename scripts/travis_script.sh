@@ -36,7 +36,7 @@ if [[ $GROUP == docs ]]; then
 
     # Verify tutorial docs build
     pushd docs
-    pip install sphinx sphinx_rtd_theme recommonmark
+    pip install sphinx sphinx-copybutton sphinx_rtd_theme recommonmark
     make linkcheck
     make html
     popd
@@ -52,6 +52,10 @@ if [[ $GROUP == integrity ]]; then
 
     # Lint our files.
     jlpm run lint:check || (echo 'Please run `jlpm run lint` locally and push changes' && exit 1)
+
+
+    # Build the vega bundles
+    jlpm run build:vega
 
     # Build the packages individually.
     jlpm run build:src
@@ -133,6 +137,11 @@ if [[ $GROUP == usage ]]; then
     jupyter labextension uninstall @jupyterlab/mock-extension --no-build
     jupyter labextension uninstall @jupyterlab/notebook-extension --no-build
     popd
+    jupyter lab workspaces export > workspace.json
+    jupyter lab workspaces import --name newspace workspace.json
+    jupyter lab workspaces export newspace > newspace.json
+    rm workspace.json newspace.json
+
 
     # Make sure we can call help on all the cli apps.
     jupyter lab -h
@@ -148,11 +157,11 @@ if [[ $GROUP == usage ]]; then
     jupyter labextension disable -h
 
     # Make sure we can add and remove a sibling package.
-    jlpm run add:sibling jupyterlab/tests/mock_packages/extension
-    jlpm run build
-    jlpm run remove:package extension
-    jlpm run build
-    jlpm run integrity --force  # Should have a clean tree now
+    # jlpm run add:sibling jupyterlab/tests/mock_packages/extension
+    # jlpm run build
+    # jlpm run remove:package extension
+    # jlpm run build
+    # jlpm run integrity --force  # Should have a clean tree now
 
     # Test cli tools
     jlpm run get:dependency mocha

@@ -440,8 +440,11 @@ export function ToolbarButtonComponent(props: ToolbarButtonComponent.IProps) {
   // We avoid a click event by calling preventDefault in mousedown, and
   // we bind the button action to `mousedown`.
   const handleMouseDown = (event: React.MouseEvent) => {
-    event.preventDefault();
-    props.onClick();
+    // Fire action only when left button is pressed.
+    if (event.button === 0) {
+      event.preventDefault();
+      props.onClick();
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -669,10 +672,7 @@ namespace Private {
       super();
       this.addClass(TOOLBAR_KERNEL_STATUS_CLASS);
       this._onStatusChanged(session);
-      session.statusChanged.connect(
-        this._onStatusChanged,
-        this
-      );
+      session.statusChanged.connect(this._onStatusChanged, this);
     }
 
     /**

@@ -107,20 +107,11 @@ export class DocumentWidgetManager implements IDisposable {
       disposables.add(extender.createNew(widget, context));
     });
     Private.disposablesProperty.set(widget, disposables);
-    widget.disposed.connect(
-      this._onWidgetDisposed,
-      this
-    );
+    widget.disposed.connect(this._onWidgetDisposed, this);
 
     this.adoptWidget(context, widget);
-    context.fileChanged.connect(
-      this._onFileChanged,
-      this
-    );
-    context.pathChanged.connect(
-      this._onPathChanged,
-      this
-    );
+    context.fileChanged.connect(this._onFileChanged, this);
+    context.pathChanged.connect(this._onPathChanged, this);
     void context.ready.then(() => {
       void this.setCaption(widget);
     });
@@ -143,10 +134,7 @@ export class DocumentWidgetManager implements IDisposable {
     MessageLoop.installMessageHook(widget, this);
     widget.addClass(DOCUMENT_CLASS);
     widget.title.closable = true;
-    widget.disposed.connect(
-      this._widgetDisposed,
-      this
-    );
+    widget.disposed.connect(this._widgetDisposed, this);
     Private.contextProperty.set(widget, context);
   }
 
@@ -209,7 +197,7 @@ export class DocumentWidgetManager implements IDisposable {
     if (!factory) {
       return undefined;
     }
-    let newWidget = factory.clone(widget as IDocumentWidget, context);
+    let newWidget = factory.createNew(context, widget as IDocumentWidget);
     this._initializeWidget(newWidget, factory, context);
     return newWidget;
   }

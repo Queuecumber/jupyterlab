@@ -1,7 +1,7 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-import { InstanceTracker } from '@jupyterlab/apputils';
+import { WidgetTracker } from '@jupyterlab/apputils';
 import { Cell } from '@jupyterlab/cells';
 
 import { ISignal, Signal } from '@phosphor/signaling';
@@ -10,7 +10,7 @@ import { INotebookTracker } from './tokens';
 import { NotebookPanel } from './panel';
 import { Notebook } from './widget';
 
-export class NotebookTracker extends InstanceTracker<NotebookPanel>
+export class NotebookTracker extends WidgetTracker<NotebookPanel>
   implements INotebookTracker {
   /**
    * The currently focused cell.
@@ -51,14 +51,8 @@ export class NotebookTracker extends InstanceTracker<NotebookPanel>
    */
   add(panel: NotebookPanel): Promise<void> {
     const promise = super.add(panel);
-    panel.content.activeCellChanged.connect(
-      this._onActiveCellChanged,
-      this
-    );
-    panel.content.selectionChanged.connect(
-      this._onSelectionChanged,
-      this
-    );
+    panel.content.activeCellChanged.connect(this._onActiveCellChanged, this);
+    panel.content.selectionChanged.connect(this._onSelectionChanged, this);
     return promise;
   }
 

@@ -18,8 +18,6 @@ import {
 
 import { DocumentWidget } from '@jupyterlab/docregistry';
 
-import { IRenderMimeRegistry } from '@jupyterlab/rendermime';
-
 import { INotebookModel } from './model';
 
 import { Notebook, StaticNotebook } from './widget';
@@ -55,10 +53,7 @@ export class NotebookPanel extends DocumentWidget<Notebook, INotebookModel> {
 
     // Set up things related to the context
     this.content.model = this.context.model;
-    this.context.session.kernelChanged.connect(
-      this._onKernelChanged,
-      this
-    );
+    this.context.session.kernelChanged.connect(this._onKernelChanged, this);
     this.context.session.statusChanged.connect(
       this._onSessionStatusChanged,
       this
@@ -87,26 +82,6 @@ export class NotebookPanel extends DocumentWidget<Notebook, INotebookModel> {
    */
   get session(): IClientSession {
     return this.context.session;
-  }
-
-  /**
-   * The content factory for the notebook.
-   *
-   * TODO: deprecate this in favor of the .content attribute
-   *
-   */
-  get contentFactory(): Notebook.IContentFactory {
-    return this.content.contentFactory;
-  }
-
-  /**
-   * The rendermime instance for the notebook.
-   *
-   * TODO: deprecate this in favor of the .content attribute
-   *
-   */
-  get rendermime(): IRenderMimeRegistry {
-    return this.content.rendermime;
   }
 
   /**

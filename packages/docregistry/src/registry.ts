@@ -1016,15 +1016,12 @@ export namespace DocumentRegistry {
     /**
      * Create a new widget given a context.
      *
+     * @param source - A widget to clone
+     *
      * #### Notes
      * It should emit the [widgetCreated] signal with the new widget.
      */
-    createNew(context: IContext<U>): T;
-
-    /**
-     * Clone an existing widget given a context
-     */
-    clone(widget: T, context: IContext<U>): T;
+    createNew(context: IContext<U>, source?: T): T;
   }
 
   /**
@@ -1217,7 +1214,7 @@ export namespace DocumentRegistry {
     extensions: [],
     mimeTypes: ['text/directory'],
     contentType: 'directory',
-    iconClass: 'jp-MaterialIcon jp-OpenFolderIcon'
+    iconClass: 'jp-MaterialIcon jp-FolderIcon'
   };
 
   /**
@@ -1274,7 +1271,7 @@ export namespace DocumentRegistry {
       displayName: 'YAML File',
       mimeTypes: ['text/x-yaml', 'text/yaml'],
       extensions: ['.yaml', '.yml'],
-      iconClass: 'jp-MaterialIcon jp-YamlIcon'
+      iconClass: 'jp-MaterialIcon jp-YAMLIcon'
     },
     {
       name: 'svg',

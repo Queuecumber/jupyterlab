@@ -127,7 +127,7 @@ const main: JupyterFrontEndPlugin<void> = {
             body: 'Build successfully completed, reload page?',
             buttons: [
               Dialog.cancelButton(),
-              Dialog.warnButton({ label: 'RELOAD' })
+              Dialog.warnButton({ label: 'Reload' })
             ]
           });
         })
@@ -164,7 +164,7 @@ const main: JupyterFrontEndPlugin<void> = {
         void showDialog({
           title: 'Build Recommended',
           body,
-          buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'BUILD' })]
+          buttons: [Dialog.cancelButton(), Dialog.okButton({ label: 'Build' })]
         }).then(result => (result.button.accept ? build() : undefined));
       });
     }
@@ -196,7 +196,7 @@ const layout: JupyterFrontEndPlugin<ILayoutRestorer> = {
   activate: (app: JupyterFrontEnd, state: IStateDB, labShell: ILabShell) => {
     const first = app.started;
     const registry = app.commands;
-    const restorer = new LayoutRestorer({ first, registry, state });
+    const restorer = new LayoutRestorer({ connector: state, first, registry });
 
     void restorer.fetch().then(saved => {
       labShell.restoreLayout(saved);
@@ -271,14 +271,12 @@ const tree: JupyterFrontEndPlugin<void> = {
             : paths.urls.app) +
           args.search +
           args.hash;
-        const immediate = true;
 
         // Remove the tree portion of the URL leaving the rest intact.
         router.navigate(url);
 
         try {
-          await commands.execute('filebrowser:navigate', { path });
-          await commands.execute('apputils:save-statedb', { immediate });
+          await commands.execute('filebrowser:open-path', { path });
         } catch (error) {
           console.warn('Tree routing failed.', error);
         }
@@ -397,10 +395,8 @@ const sidebar: JupyterFrontEndPlugin<void> = {
     app.commands.addCommand(CommandIDs.switchSidebar, {
       label: 'Switch Sidebar Side',
       execute: () => {
-        // First, try to find the right panel based on the
-        // application context menu click,
-        // If we can't find it there, look for use the active
-        // left/right widgets.
+        // First, try to find the correct panel based on the
+        // application context menu click.
         const contextNode: HTMLElement = app.contextMenuHitTest(
           node => !!node.dataset.id
         );
@@ -415,14 +411,10 @@ const sidebar: JupyterFrontEndPlugin<void> = {
           } else {
             side = 'left';
           }
-        } else if (document.body.dataset.leftSidebarWidget) {
-          id = document.body.dataset.leftSidebarWidget;
-          side = 'right';
-        } else if (document.body.dataset.rightSidebarWidget) {
-          id = document.body.dataset.rightSidebarWidget;
-          side = 'left';
+        } else {
+          // Bail if we don't find a sidebar for the widget.
+          return;
         }
-
         // Move the panel to the other side.
         const newOverrides = { ...overrides };
         newOverrides[id] = side;
@@ -540,6 +532,12 @@ function addCommands(app: JupyterLab, palette: ICommandPalette): void {
   });
   palette.addItem({ command: CommandIDs.activatePreviousTab, category });
 
+  // A CSS selector targeting tabs in the main area. This is a very
+  // specific selector since we really only want tabs that are
+  // in the main area, as opposed to those in sidebars, ipywidgets, etc.
+  const tabSelector =
+    '#jp-main-dock-panel .p-DockPanel-tabBar.jp-Activity .p-TabBar-tab';
+
   commands.addCommand(CommandIDs.close, {
     label: () => 'Close Tab',
     isEnabled: () =>
@@ -553,7 +551,7 @@ function addCommands(app: JupyterLab, palette: ICommandPalette): void {
   palette.addItem({ command: CommandIDs.close, category });
   contextMenu.addItem({
     command: CommandIDs.close,
-    selector: '.p-TabBar-tab',
+    selector: tabSelector,
     rank: 4
   });
 
@@ -587,7 +585,7 @@ function addCommands(app: JupyterLab, palette: ICommandPalette): void {
   palette.addItem({ command: CommandIDs.closeOtherTabs, category });
   contextMenu.addItem({
     command: CommandIDs.closeOtherTabs,
-    selector: '.p-TabBar-tab',
+    selector: tabSelector,
     rank: 4
   });
 
@@ -606,7 +604,7 @@ function addCommands(app: JupyterLab, palette: ICommandPalette): void {
   palette.addItem({ command: CommandIDs.closeRightTabs, category });
   contextMenu.addItem({
     command: CommandIDs.closeRightTabs,
-    selector: '.p-TabBar-tab',
+    selector: tabSelector,
     rank: 5
   });
 

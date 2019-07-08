@@ -82,9 +82,6 @@
       "path": "../extensionmanager-extension"
     },
     {
-      "path": "../faq-extension"
-    },
-    {
       "path": "../filebrowser"
     },
     {
@@ -227,6 +224,9 @@
     },
     {
       "path": "../vdom-extension"
+    },
+    {
+      "path": "../vega4-extension"
     },
     {
       "path": "../vega5-extension"

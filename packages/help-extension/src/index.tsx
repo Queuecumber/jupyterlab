@@ -11,12 +11,14 @@ import {
   Dialog,
   ICommandPalette,
   IFrame,
-  InstanceTracker,
   MainAreaWidget,
-  showDialog
+  showDialog,
+  WidgetTracker
 } from '@jupyterlab/apputils';
 
 import { PageConfig, URLExt } from '@jupyterlab/coreutils';
+
+import { IInspector } from '@jupyterlab/inspector';
 
 import { IMainMenu } from '@jupyterlab/mainmenu';
 
@@ -65,8 +67,12 @@ const RESOURCES = [
     url: 'https://jupyterlab.readthedocs.io/en/stable/'
   },
   {
-    text: 'Notebook Reference',
-    url: 'https://jupyter-notebook.readthedocs.io/en/latest/'
+    text: 'JupyterLab FAQ',
+    url: 'https://jupyterlab.readthedocs.io/en/stable/getting_started/faq.html'
+  },
+  {
+    text: 'Jupyter Reference',
+    url: 'https://jupyter.org/documentation'
   },
   {
     text: 'Markdown Reference',
@@ -85,7 +91,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
   activate,
   id: '@jupyterlab/help-extension:plugin',
   requires: [IMainMenu],
-  optional: [ICommandPalette, ILayoutRestorer],
+  optional: [ICommandPalette, ILayoutRestorer, IInspector],
   autoStart: true
 };
 
@@ -105,18 +111,19 @@ function activate(
   app: JupyterFrontEnd,
   mainMenu: IMainMenu,
   palette: ICommandPalette | null,
-  restorer: ILayoutRestorer | null
+  restorer: ILayoutRestorer | null,
+  inspector: IInspector | null
 ): void {
   let counter = 0;
   const category = 'Help';
   const namespace = 'help-doc';
   const baseUrl = PageConfig.getBaseUrl();
   const { commands, shell, serviceManager } = app;
-  const tracker = new InstanceTracker<MainAreaWidget>({ namespace });
+  const tracker = new WidgetTracker<MainAreaWidget<IFrame>>({ namespace });
 
   // Handle state restoration.
   if (restorer) {
-    restorer.restore(tracker, {
+    void restorer.restore(tracker, {
       command: CommandIDs.open,
       args: widget => ({
         url: widget.content.url,
@@ -129,7 +136,7 @@ function activate(
   /**
    * Create a new HelpWidget widget.
    */
-  function newHelpWidget(url: string, text: string): MainAreaWidget {
+  function newHelpWidget(url: string, text: string): MainAreaWidget<IFrame> {
     // Allow scripts and forms so that things like
     // readthedocs can use their search functionality.
     // We *don't* allow same origin requests, which
@@ -149,12 +156,17 @@ function activate(
 
   // Populate the Help menu.
   const helpMenu = mainMenu.helpMenu;
-  const labGroup = [
-    CommandIDs.about,
-    'faq-jupyterlab:open',
-    CommandIDs.launchClassic
-  ].map(command => ({ command }));
+  const labGroup = [CommandIDs.about, CommandIDs.launchClassic].map(
+    command => ({ command })
+  );
   helpMenu.addGroup(labGroup, 0);
+
+  // Contextual help in its own group
+  const contextualHelpGroup = [inspector ? 'inspector:open' : null].map(
+    command => ({ command })
+  );
+  helpMenu.addGroup(contextualHelpGroup, 0);
+
   const resourcesGroup = RESOURCES.map(args => ({
     args,
     command: CommandIDs.open
@@ -242,7 +254,7 @@ function activate(
             body,
             buttons: [
               Dialog.createButton({
-                label: 'DISMISS',
+                label: 'Dismiss',
                 className: 'jp-About-button jp-mod-reject jp-mod-styled'
               })
             ]
@@ -335,7 +347,7 @@ function activate(
         body,
         buttons: [
           Dialog.createButton({
-            label: 'DISMISS',
+            label: 'Dismiss',
             className: 'jp-About-button jp-mod-reject jp-mod-styled'
           })
         ]

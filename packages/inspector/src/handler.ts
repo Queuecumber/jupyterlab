@@ -69,14 +69,8 @@ export class InspectionHandler implements IDisposable, IInspector.IInspectable {
       // Call onEditorChange to cover the case where the user changes
       // the active cell
       this.onEditorChange();
-      editor.model.selections.changed.connect(
-        this._onChange,
-        this
-      );
-      editor.model.value.changed.connect(
-        this._onChange,
-        this
-      );
+      editor.model.selections.changed.connect(this._onChange, this);
+      editor.model.value.changed.connect(this._onChange, this);
     }
   }
 
@@ -173,7 +167,7 @@ export class InspectionHandler implements IDisposable, IInspector.IInspectable {
    * Handle changes to the editor state, debouncing.
    */
   private _onChange(): void {
-    this._debouncer.invoke();
+    void this._debouncer.invoke();
   }
 
   private _cleared = new Signal<InspectionHandler, void>(this);

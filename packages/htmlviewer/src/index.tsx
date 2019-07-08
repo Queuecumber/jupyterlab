@@ -5,7 +5,7 @@
 
 import {
   IFrame,
-  IInstanceTracker,
+  IWidgetTracker,
   ReactWidget,
   ToolbarButton,
   ToolbarButtonComponent,
@@ -30,7 +30,7 @@ import * as React from 'react';
 /**
  * A class that tracks HTML viewer widgets.
  */
-export interface IHTMLViewerTracker extends IInstanceTracker<HTMLViewer> {}
+export interface IHTMLViewerTracker extends IWidgetTracker<HTMLViewer> {}
 
 /**
  * The HTML viewer tracker token.
@@ -80,10 +80,7 @@ export class HTMLViewer extends DocumentWidget<IFrame>
         signal: this.context.model.contentChanged,
         timeout: RENDER_TIMEOUT
       });
-      this._monitor.activityStopped.connect(
-        this.update,
-        this
-      );
+      this._monitor.activityStopped.connect(this.update, this);
     });
 
     // Make a refresh button for the toolbar.

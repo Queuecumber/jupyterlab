@@ -55,10 +55,7 @@ export class DocumentManager implements IDocumentManager {
     this._when = options.when || options.manager.ready;
 
     let widgetManager = new DocumentWidgetManager({ registry: this.registry });
-    widgetManager.activateRequested.connect(
-      this._onActivateRequested,
-      this
-    );
+    widgetManager.activateRequested.connect(this._onActivateRequested, this);
     this._widgetManager = widgetManager;
     this._setBusy = options.setBusy;
   }
@@ -417,8 +414,11 @@ export class DocumentManager implements IDocumentManager {
     path: string,
     factoryName: string
   ): Private.IContext | undefined {
+    const normalizedPath = this.services.contents.normalize(path);
     return find(this._contexts, context => {
-      return context.path === path && context.factoryName === factoryName;
+      return (
+        context.path === normalizedPath && context.factoryName === factoryName
+      );
     });
   }
 
@@ -431,7 +431,8 @@ export class DocumentManager implements IDocumentManager {
    * notebook model factory and a text model factory).
    */
   private _contextsForPath(path: string): Private.IContext[] {
-    return this._contexts.filter(context => context.path === path);
+    const normalizedPath = this.services.contents.normalize(path);
+    return this._contexts.filter(context => context.path === normalizedPath);
   }
 
   /**
@@ -477,10 +478,7 @@ export class DocumentManager implements IDocumentManager {
         handler.start();
       }
     });
-    context.disposed.connect(
-      this._onContextDisposed,
-      this
-    );
+    context.disposed.connect(this._onContextDisposed, this);
     this._contexts.push(context);
     return context;
   }

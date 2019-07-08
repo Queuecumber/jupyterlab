@@ -54,11 +54,6 @@ const ACTIVE_CLASS = 'jp-mod-active';
  */
 const DEFAULT_RANK = 500;
 
-/**
- * The data attribute added to the document body indicating shell's mode.
- */
-const MODE_ATTRIBUTE = 'data-shell-mode';
-
 const ACTIVITY_CLASS = 'jp-Activity';
 
 /* tslint:disable */
@@ -255,20 +250,11 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     this.layout = rootLayout;
 
     // Connect change listeners.
-    this._tracker.currentChanged.connect(
-      this._onCurrentChanged,
-      this
-    );
-    this._tracker.activeChanged.connect(
-      this._onActiveChanged,
-      this
-    );
+    this._tracker.currentChanged.connect(this._onCurrentChanged, this);
+    this._tracker.activeChanged.connect(this._onActiveChanged, this);
 
     // Connect main layout change listener.
-    this._dockPanel.layoutModified.connect(
-      this._onLayoutModified,
-      this
-    );
+    this._dockPanel.layoutModified.connect(this._onLayoutModified, this);
 
     // Catch current changed events on the side handlers.
     this._leftHandler.sideBar.currentChanged.connect(
@@ -370,8 +356,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
         dock.activateWidget(this.currentWidget);
       }
 
-      // Set the mode data attribute on the document body.
-      document.body.setAttribute(MODE_ATTRIBUTE, mode);
+      // Set the mode data attribute on the application shell node.
+      this.node.dataset.shellMode = mode;
       return;
     }
 
@@ -410,8 +396,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
       dock.activateWidget(applicationCurrentWidget);
     }
 
-    // Set the mode data attribute on the document body.
-    document.body.setAttribute(MODE_ATTRIBUTE, mode);
+    // Set the mode data attribute on the applications shell node.
+    this.node.dataset.shellMode = mode;
   }
 
   /**
@@ -703,7 +689,7 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
    * Handle `after-attach` messages for the application shell.
    */
   protected onAfterAttach(msg: Message): void {
-    document.body.setAttribute(MODE_ATTRIBUTE, this.mode);
+    this.node.dataset.shellMode = this.mode;
   }
 
   /**
@@ -884,8 +870,8 @@ export class LabShell extends Widget implements JupyterFrontEnd.IShell {
     return index < len - 1
       ? bars[index + 1]
       : index === len - 1
-        ? bars[0]
-        : null;
+      ? bars[0]
+      : null;
   }
 
   /*
@@ -1042,7 +1028,6 @@ namespace Private {
      * Construct a new side bar handler.
      */
     constructor(side: string) {
-      this._side = side;
       this._sideBar = new TabBar<Widget>({
         insertBehavior: 'none',
         removeBehavior: 'none',
@@ -1052,18 +1037,12 @@ namespace Private {
       this._sideBar.hide();
       this._stackedPanel.hide();
       this._lastCurrent = null;
-      this._sideBar.currentChanged.connect(
-        this._onCurrentChanged,
-        this
-      );
+      this._sideBar.currentChanged.connect(this._onCurrentChanged, this);
       this._sideBar.tabActivateRequested.connect(
         this._onTabActivateRequested,
         this
       );
-      this._stackedPanel.widgetRemoved.connect(
-        this._onWidgetRemoved,
-        this
-      );
+      this._stackedPanel.widgetRemoved.connect(this._onWidgetRemoved, this);
     }
 
     /**
@@ -1220,12 +1199,6 @@ namespace Private {
         newWidget.show();
       }
       this._lastCurrent = newWidget || oldWidget;
-      if (newWidget) {
-        const id = newWidget.id;
-        document.body.setAttribute(`data-${this._side}-sidebar-widget`, id);
-      } else {
-        document.body.removeAttribute(`data-${this._side}-sidebar-widget`);
-      }
       this._refreshVisibility();
     }
 
@@ -1252,7 +1225,6 @@ namespace Private {
     }
 
     private _items = new Array<Private.IRankItem>();
-    private _side: string;
     private _sideBar: TabBar<Widget>;
     private _stackedPanel: StackedPanel;
     private _lastCurrent: Widget | null;

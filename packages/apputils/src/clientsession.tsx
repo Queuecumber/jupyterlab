@@ -601,8 +601,8 @@ export class ClientSession implements IClientSession {
       return Promise.resolve();
     }
     const buttons = cancelable
-      ? [Dialog.cancelButton(), Dialog.okButton({ label: 'SELECT' })]
-      : [Dialog.okButton({ label: 'SELECT' })];
+      ? [Dialog.cancelButton(), Dialog.okButton({ label: 'Select' })]
+      : [Dialog.okButton({ label: 'Select' })];
 
     let dialog = (this._dialog = new Dialog({
       title: 'Select Kernel',
@@ -683,30 +683,12 @@ export class ClientSession implements IClientSession {
       this._propertyChanged.emit('type');
     }
 
-    session.terminated.connect(
-      this._onTerminated,
-      this
-    );
-    session.propertyChanged.connect(
-      this._onPropertyChanged,
-      this
-    );
-    session.kernelChanged.connect(
-      this._onKernelChanged,
-      this
-    );
-    session.statusChanged.connect(
-      this._onStatusChanged,
-      this
-    );
-    session.iopubMessage.connect(
-      this._onIopubMessage,
-      this
-    );
-    session.unhandledMessage.connect(
-      this._onUnhandledMessage,
-      this
-    );
+    session.terminated.connect(this._onTerminated, this);
+    session.propertyChanged.connect(this._onPropertyChanged, this);
+    session.kernelChanged.connect(this._onKernelChanged, this);
+    session.statusChanged.connect(this._onStatusChanged, this);
+    session.iopubMessage.connect(this._onIopubMessage, this);
+    session.unhandledMessage.connect(this._onUnhandledMessage, this);
     this._prevKernelName = session.kernel.name;
 
     // The session kernel was disposed above when the session was disposed, so
@@ -899,7 +881,7 @@ export namespace ClientSession {
   export async function restartKernel(
     kernel: Kernel.IKernelConnection
   ): Promise<boolean> {
-    let restartBtn = Dialog.warnButton({ label: 'RESTART ' });
+    let restartBtn = Dialog.warnButton({ label: 'Restart' });
     const result = await showDialog({
       title: 'Restart Kernel?',
       body:

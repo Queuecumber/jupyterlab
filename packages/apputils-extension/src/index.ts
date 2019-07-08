@@ -130,13 +130,15 @@ const themes: JupyterFrontEndPlugin<IThemeManager> = {
     // Set data attributes on the application shell for the current theme.
     manager.themeChanged.connect((sender, args) => {
       currentTheme = args.newValue;
-      app.shell.dataset.themeLight = String(manager.isLight(currentTheme));
-      app.shell.dataset.themeName = currentTheme;
+      document.body.dataset.jpThemeLight = String(
+        manager.isLight(currentTheme)
+      );
+      document.body.dataset.jpThemeName = currentTheme;
       if (
-        app.shell.dataset.themeScrollbars !==
+        document.body.dataset.jpThemeScrollbars !==
         String(manager.themeScrollbars(currentTheme))
       ) {
-        app.shell.dataset.themeScrollbars = String(
+        document.body.dataset.jpThemeScrollbars = String(
           manager.themeScrollbars(currentTheme)
         );
       }
@@ -258,7 +260,7 @@ const resolver: JupyterFrontEndPlugin<IWindowResolver> = {
         const pool =
           'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         const random = pool[Math.floor(Math.random() * pool.length)];
-        const path = URLExt.join(base, workspaces, `auto-${random}`) + rest;
+        const path = URLExt.join(base, workspaces, `auto-${random}`, rest);
 
         // Clone the originally requested workspace after redirecting.
         query['clone'] = workspace;
@@ -458,10 +460,7 @@ const state: JupyterFrontEndPlugin<IStateDB> = {
         }
 
         // Any time the local state database changes, save the workspace.
-        db.changed.connect(
-          () => void save.invoke(),
-          db
-        );
+        db.changed.connect(() => void save.invoke(), db);
 
         try {
           const saved = await workspaces.fetch(source);

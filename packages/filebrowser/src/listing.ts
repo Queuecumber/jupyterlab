@@ -189,18 +189,9 @@ export class DirListing extends Widget {
     });
     this.addClass(DIR_LISTING_CLASS);
     this._model = options.model;
-    this._model.fileChanged.connect(
-      this._onFileChanged,
-      this
-    );
-    this._model.refreshed.connect(
-      this._onModelRefreshed,
-      this
-    );
-    this._model.pathChanged.connect(
-      this._onPathChanged,
-      this
-    );
+    this._model.fileChanged.connect(this._onFileChanged, this);
+    this._model.refreshed.connect(this._onModelRefreshed, this);
+    this._model.pathChanged.connect(this._onPathChanged, this);
     this._editNode = document.createElement('input');
     this._editNode.className = EDITOR_CLASS;
     this._manager = this._model.manager;
@@ -208,10 +199,7 @@ export class DirListing extends Widget {
 
     const headerNode = DOMUtils.findElement(this.node, HEADER_CLASS);
     this._renderer.populateHeaderNode(headerNode);
-    this._manager.activateRequested.connect(
-      this._onActivateRequested,
-      this
-    );
+    this._manager.activateRequested.connect(this._onActivateRequested, this);
   }
 
   /**
@@ -393,7 +381,7 @@ export class DirListing extends Widget {
       return showDialog({
         title: 'Delete',
         body: message,
-        buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'DELETE' })]
+        buttons: [Dialog.cancelButton(), Dialog.warnButton({ label: 'Delete' })]
       }).then(result => {
         if (!this.isDisposed && result.button.accept) {
           return this._delete(names);
@@ -571,27 +559,34 @@ export class DirListing extends Widget {
   }
 
   /**
+   * Clear the selected items.
+   */
+  clearSelectedItems() {
+    this._selection = Object.create(null);
+  }
+
+  /**
    * Select an item by name.
    *
-   * @parem name - The name of the item to select.
+   * @param name - The name of the item to select.
    *
    * @returns A promise that resolves when the name is selected.
    */
-  selectItemByName(name: string): Promise<void> {
+  async selectItemByName(name: string): Promise<void> {
     // Make sure the file is available.
-    return this.model.refresh().then(() => {
-      if (this.isDisposed) {
-        throw new Error('File browser is disposed.');
-      }
-      let items = this._sortedItems;
-      let index = ArrayExt.findFirstIndex(items, value => value.name === name);
-      if (index === -1) {
-        throw new Error('Item does not exist.');
-      }
-      this._selectItem(index, false);
-      MessageLoop.sendMessage(this, Widget.Msg.UpdateRequest);
-      ElementExt.scrollIntoViewIfNeeded(this.contentNode, this._items[index]);
-    });
+    await this.model.refresh();
+
+    if (this.isDisposed) {
+      throw new Error('File browser is disposed.');
+    }
+    let items = this._sortedItems;
+    let index = ArrayExt.findFirstIndex(items, value => value.name === name);
+    if (index === -1) {
+      throw new Error('Item does not exist.');
+    }
+    this._selectItem(index, false);
+    MessageLoop.sendMessage(this, Widget.Msg.UpdateRequest);
+    ElementExt.scrollIntoViewIfNeeded(this.contentNode, this._items[index]);
   }
 
   /**
@@ -884,7 +879,7 @@ export class DirListing extends Widget {
       let altered = event.metaKey || event.shiftKey || event.ctrlKey;
       // See if we need to clear the other selection.
       if (!altered && event.button === 0) {
-        this._selection = Object.create(null);
+        this.clearSelectedItems();
         this._selection[this._softSelection] = true;
         this.update();
       }
@@ -1279,7 +1274,7 @@ export class DirListing extends Widget {
       // Default to selecting the only the item.
     } else {
       // Select only the given item.
-      this._selection = Object.create(null);
+      this.clearSelectedItems();
       this._selection[name] = true;
     }
     this.update();
@@ -1366,6 +1361,7 @@ export class DirListing extends Widget {
     this._selectItem(index, false);
 
     return Private.doRename(nameNode, this._editNode).then(newName => {
+      this.node.focus();
       if (!newName || newName === original) {
         this._inRename = false;
         return original;
@@ -1422,7 +1418,7 @@ export class DirListing extends Widget {
     // Selected the given row(s)
     let items = this._sortedItems;
     if (!keepExisting) {
-      this._selection = Object.create(null);
+      this.clearSelectedItems();
     }
     let name = items[index].name;
     this._selection[name] = true;
@@ -1435,7 +1431,7 @@ export class DirListing extends Widget {
   private _onModelRefreshed(): void {
     // Update the selection.
     let existing = Object.keys(this._selection);
-    this._selection = Object.create(null);
+    this.clearSelectedItems();
     each(this._model.items(), item => {
       let name = item.name;
       if (existing.indexOf(name) !== -1) {
@@ -1455,7 +1451,7 @@ export class DirListing extends Widget {
    */
   private _onPathChanged(): void {
     // Reset the selection.
-    this._selection = Object.create(null);
+    this.clearSelectedItems();
     // Update the sorted items.
     this.sort(this.sortState);
   }

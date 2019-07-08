@@ -47,10 +47,7 @@ export abstract class DocumentModel implements IDisposable {
     this._defaultLang = languagePreference || '';
 
     let mimeTypeObs = this.modelDB.createValue('mimeType');
-    mimeTypeObs.changed.connect(
-      this._onMimeTypeChanged,
-      this
-    );
+    mimeTypeObs.changed.connect(this._onMimeTypeChanged, this);
     this._defaultMimeType = mimeType;
   }
 
@@ -244,10 +241,7 @@ export class TextModel extends DocumentModel
   constructor(languagePreference?: string, modelDB?: IModelDB) {
     super('text/plain', languagePreference, modelDB);
     let value = this.modelDB.createString('value');
-    value.changed.connect(
-      this.triggerContentChange,
-      this
-    );
+    value.changed.connect(this.triggerContentChange, this);
   }
 
   /**
@@ -299,10 +293,7 @@ export class Base64Model extends DocumentModel {
   constructor(languagePreference?: string, modelDB?: IModelDB) {
     super('text/plain', languagePreference, modelDB);
     let value = this.modelDB.createValue('value');
-    value.changed.connect(
-      this.triggerContentChange,
-      this
-    );
+    value.changed.connect(this.triggerContentChange, this);
   }
 
   /**
@@ -633,9 +624,9 @@ export abstract class ABCWidgetFactory<
    * #### Notes
    * It should emit the [widgetCreated] signal with the new widget.
    */
-  createNew(context: DocumentRegistry.IContext<U>): T {
+  createNew(context: DocumentRegistry.IContext<U>, source?: T): T {
     // Create the new widget
-    const widget = this.createNewWidget(context);
+    const widget = this.createNewWidget(context, source);
 
     // Add toolbar items
     let items: DocumentRegistry.IToolbarItem[];
@@ -655,21 +646,12 @@ export abstract class ABCWidgetFactory<
   }
 
   /**
-   * Clone a widget given a context
-   *
-   * ### Notes
-   * This implementation defaults to creating a new widget.
-   * Subclasses can override this if they wish to handle
-   * cloning a widget differently.
-   */
-  clone(widget: T, context: DocumentRegistry.IContext<U>): T {
-    return this.createNew(context);
-  }
-
-  /**
    * Create a widget for a context.
    */
-  protected abstract createNewWidget(context: DocumentRegistry.IContext<U>): T;
+  protected abstract createNewWidget(
+    context: DocumentRegistry.IContext<U>,
+    source?: T
+  ): T;
 
   /**
    * Default factory for toolbar items to be added after the widget is created.
@@ -716,17 +698,11 @@ export class DocumentWidget<
     this.context = options.context;
 
     // Handle context path changes
-    this.context.pathChanged.connect(
-      this._onPathChanged,
-      this
-    );
+    this.context.pathChanged.connect(this._onPathChanged, this);
     this._onPathChanged(this.context, this.context.path);
 
     // Listen for changes in the dirty state.
-    this.context.model.stateChanged.connect(
-      this._onModelStateChanged,
-      this
-    );
+    this.context.model.stateChanged.connect(this._onModelStateChanged, this);
     void this.context.ready.then(() => {
       this._handleDirtyState();
     });

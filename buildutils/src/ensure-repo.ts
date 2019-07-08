@@ -19,7 +19,9 @@ type Dict<T> = { [key: string]: T };
 
 // Data to ignore.
 let MISSING: Dict<string[]> = {
-  '@jupyterlab/buildutils': ['path']
+  '@jupyterlab/buildutils': ['path'],
+  '@jupyterlab/vega4-extension': ['vega-embed'],
+  '@jupyterlab/vega5-extension': ['vega-embed']
 };
 
 let UNUSED: Dict<string[]> = {
@@ -29,9 +31,13 @@ let UNUSED: Dict<string[]> = {
   '@jupyterlab/services': ['node-fetch', 'ws'],
   '@jupyterlab/testutils': ['node-fetch', 'identity-obj-proxy'],
   '@jupyterlab/test-csvviewer': ['csv-spectrum'],
+  '@jupyterlab/vega4-extension': ['vega', 'vega-lite'],
   '@jupyterlab/vega5-extension': ['vega', 'vega-lite'],
   '@jupyterlab/ui-components': ['@blueprintjs/icons']
 };
+
+// Packages that are allowed to have differing versions
+let DIFFERENT_VERSIONS: Array<string> = ['vega-lite', 'vega', 'vega-embed'];
 
 let SKIP_CSS: Dict<string[]> = {
   '@jupyterlab/application': ['@jupyterlab/rendermime'],
@@ -52,7 +58,6 @@ let SKIP_CSS: Dict<string[]> = {
   ],
   '@jupyterlab/filebrowser': ['@jupyterlab/statusbar'],
   '@jupyterlab/fileeditor': ['@jupyterlab/statusbar'],
-  '@jupyterlab/faq-extension': ['@jupyterlab/application'],
   '@jupyterlab/help-extension': ['@jupyterlab/application'],
   '@jupyterlab/shortcuts-extension': ['@jupyterlab/application'],
   '@jupyterlab/tabmanager-extension': ['@jupyterlab/application'],
@@ -174,8 +179,6 @@ function ensureJupyterlab(): string[] {
 
     // Make sure it is included as a dependency.
     corePackage.dependencies[data.name] = '^' + String(data.version);
-    let relativePath = `../packages/${path.basename(pkgPath)}`;
-    corePackage.jupyterlab.linkedPackages[data.name] = relativePath;
     // Add its dependencies to the core dependencies if they are in the
     // singleton packages or vendor packages.
     let deps = data.dependencies || {};
@@ -204,6 +207,22 @@ function ensureJupyterlab(): string[] {
       }
       corePackage.jupyterlab[item + 's'][data.name] = ext;
     });
+  });
+
+  utils.getLernaPaths().forEach(pkgPath => {
+    let dataPath = path.join(pkgPath, 'package.json');
+    let data: any;
+    try {
+      data = utils.readJSONFile(dataPath);
+    } catch (e) {
+      return;
+    }
+
+    // watch all src, build, and test files in the Jupyterlab project
+    let relativePath = utils.ensureUnixPathSep(
+      path.join('..', path.relative(basePath, pkgPath))
+    );
+    corePackage.jupyterlab.linkedPackages[data.name] = relativePath;
   });
 
   // Write the package.json back to disk.
@@ -309,7 +328,8 @@ export async function ensureIntegrity(): Promise<boolean> {
       missing: MISSING[name],
       unused,
       locals,
-      cssImports: cssImports[name]
+      cssImports: cssImports[name],
+      differentVersions: DIFFERENT_VERSIONS
     };
 
     if (name === '@jupyterlab/metapackage') {
