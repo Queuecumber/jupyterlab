@@ -26,7 +26,6 @@ import {
 } from '@jupyterlab/observables';
 
 import { CellList } from './celllist';
-import { showDialog, Dialog } from '@jupyterlab/apputils';
 
 /**
  * The definition of a model object for a notebook widget.
@@ -80,17 +79,11 @@ export class NotebookModel extends DocumentModel implements INotebookModel {
       options.contentFactory || NotebookModel.defaultContentFactory;
     this.contentFactory = factory.clone(this.modelDB.view('cells'));
     this._cells = new CellList(this.modelDB, this.contentFactory);
-    this._cells.changed.connect(
-      this._onCellsChanged,
-      this
-    );
+    this._cells.changed.connect(this._onCellsChanged, this);
 
     // Handle initial metadata.
     let metadata = this.modelDB.createMap('metadata');
-    metadata.changed.connect(
-      this.triggerContentChange,
-      this
-    );
+    metadata.changed.connect(this.triggerContentChange, this);
     this._deletedCells = [];
   }
 
@@ -299,20 +292,14 @@ export class NotebookModel extends DocumentModel implements INotebookModel {
     switch (change.type) {
       case 'add':
         change.newValues.forEach(cell => {
-          cell.contentChanged.connect(
-            this.triggerContentChange,
-            this
-          );
+          cell.contentChanged.connect(this.triggerContentChange, this);
         });
         break;
       case 'remove':
         break;
       case 'set':
         change.newValues.forEach(cell => {
-          cell.contentChanged.connect(
-            this.triggerContentChange,
-            this
-          );
+          cell.contentChanged.connect(this.triggerContentChange, this);
         });
         break;
       default:

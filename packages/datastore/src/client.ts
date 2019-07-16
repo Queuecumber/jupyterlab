@@ -277,7 +277,7 @@ export class CollaborationClient extends WSConnection<
 
     this.sendMessage(msg);
 
-    return promise;
+    return promise as any;
   }
 
   /**
